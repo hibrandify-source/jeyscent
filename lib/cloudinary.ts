@@ -1,5 +1,3 @@
-// lib/cloudinary.ts
-
 const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 
 /**
@@ -18,7 +16,7 @@ export function cloudinaryUrl(
 ): string {
   if (!CLOUD_NAME) {
     console.warn("NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME is not set");
-    return publicId; // Return as-is if no cloud name
+    return publicId;
   }
 
   const {
@@ -30,15 +28,18 @@ export function cloudinaryUrl(
     gravity = "auto",
   } = options || {};
 
-  const transforms: string[] = [
-    `f_${format}`,
-    `q_${quality}`,
-    crop && `c_${crop}`,
-    gravity && `g_${gravity}`,
-    width && `w_${width}`,
-    height && `h_${height}`,
-  ]
-    .filter(Boolean)
+  // ✅ Fix: explicitly type as (string | false)[] then filter to string[]
+  const transforms = (
+    [
+      `f_${format}`,
+      `q_${quality}`,
+      crop     ? `c_${crop}`     : false,
+      gravity  ? `g_${gravity}`  : false,
+      width    ? `w_${width}`    : false,
+      height   ? `h_${height}`   : false,
+    ] as (string | false)[]
+  )
+    .filter((t): t is string => Boolean(t))
     .join(",");
 
   return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${transforms}/${publicId}`;
