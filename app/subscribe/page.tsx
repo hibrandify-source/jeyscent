@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { products } from "@/data/products";
-import { formatPrice } from "@/data/products";
+import { formatPrice, getSalePrice, getOriginalDisplayPrice } from "@/data/products";
 import Link from "next/link";
 
 export default function SubscribePage() {
   const { user } = useAuth();
   const router = useRouter();
 
-  const roomDiffusers = products.filter((p) => p.type === "Room Diffuser");
+  const roomDiffusers = products.filter((p) => p.type === "Reed Diffuser");
 
   const [selectedProduct, setSelectedProduct] = useState(roomDiffusers[0]?.id || "");
   const [selectedSize, setSelectedSize] = useState(0);
@@ -21,7 +21,8 @@ export default function SubscribePage() {
 
   const currentProduct = roomDiffusers.find((p) => p.id === selectedProduct);
   const currentPrice = currentProduct?.sizes[selectedSize]?.price || 0;
-  const discountedPrice = Math.round(currentPrice * 0.9); // 10% off
+  const discountedPrice = getSalePrice(currentPrice);   // uses your central helper
+  const originalPrice = getOriginalDisplayPrice(currentPrice); // slashed price
 
   const handleSubscribe = async () => {
     if (!user) {
@@ -200,11 +201,10 @@ export default function SubscribePage() {
                         setSelectedProduct(p.id);
                         setSelectedSize(0);
                       }}
-                      className={`relative border p-4 text-left transition-all ${
-                        selectedProduct === p.id
-                          ? "border-black bg-cream"
-                          : "border-gray-200 hover:border-gray-400"
-                      }`}
+                      className={`relative border p-4 text-left transition-all ${selectedProduct === p.id
+                        ? "border-black bg-cream"
+                        : "border-gray-200 hover:border-gray-400"
+                        }`}
                     >
                       <div className="relative aspect-square mb-3 overflow-hidden bg-light-gray">
                         <Image
@@ -221,7 +221,7 @@ export default function SubscribePage() {
                       >
                         {p.fragrance}
                       </p>
-                      <p className="text-xs text-muted mt-0.5">{p.type}</p>
+                      <p className="text-xs text-muted mt-0.5">Room Diffuser</p>
                       {selectedProduct === p.id && (
                         <div className="absolute top-3 right-3 w-5 h-5 bg-black rounded-full flex items-center justify-center">
                           <svg
@@ -252,20 +252,19 @@ export default function SubscribePage() {
                       <button
                         key={size.size}
                         onClick={() => setSelectedSize(i)}
-                        className={`flex-1 px-4 py-4 border text-center transition-all ${
-                          selectedSize === i
-                            ? "bg-black text-white border-black"
-                            : "border-gray-200 hover:border-black"
-                        }`}
+                        className={`flex-1 px-4 py-4 border text-center transition-all ${selectedSize === i
+                          ? "bg-black text-white border-black"
+                          : "border-gray-200 hover:border-black"
+                          }`}
                       >
                         <span className="block font-medium text-sm">
                           {size.size}
                         </span>
                         <span className="block text-xs mt-1 opacity-60">
-                          <s>{formatPrice(size.price)}</s>
+                          <s>{formatPrice(getOriginalDisplayPrice(size.price))}</s>
                         </span>
                         <span className="block text-xs mt-0.5 font-medium">
-                          {formatPrice(Math.round(size.price * 0.9))}
+                          {formatPrice(getSalePrice(size.price))}
                         </span>
                       </button>
                     ))}
@@ -304,7 +303,7 @@ export default function SubscribePage() {
                       <div className="flex justify-between text-sm">
                         <span className="text-muted">Regular Price</span>
                         <span className="line-through text-muted">
-                          {formatPrice(currentPrice)}
+                          {formatPrice(originalPrice)}
                         </span>
                       </div>
                     </div>
@@ -316,7 +315,7 @@ export default function SubscribePage() {
                       </span>
                     </div>
                     <p className="text-xs text-green-700 mb-8">
-                      You save {formatPrice(currentPrice - discountedPrice)}{" "}
+                      You save {formatPrice(originalPrice - discountedPrice)}{" "}
                       every quarter
                     </p>
 
@@ -328,8 +327,8 @@ export default function SubscribePage() {
                       {subscribing
                         ? "Setting Up..."
                         : user
-                        ? "Start Subscription"
-                        : "Sign In to Subscribe"}
+                          ? "Start Subscription"
+                          : "Sign In to Subscribe"}
                     </button>
 
                     <p className="text-center text-[10px] text-muted mt-4">
