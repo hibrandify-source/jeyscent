@@ -121,7 +121,7 @@ export default function ShippingCalculator({
       {area && !zone && area.length >= 3 && (
         <div className="mt-3 p-3 bg-yellow-50 border border-yellow-100">
           <p className="text-xs text-yellow-800">
-            Ooops! Seems like you are outside Lagos. Your order will be shipped to the nearest bus park. Contact us on WhatsApp for details/assistance after checkout.
+            Ooops! Seems like you are outside Lagos. Your order will be shipped to the nearest bus park. Contact us on WhatsApp for details after checkout.
           </p>
         </div>
       )}
