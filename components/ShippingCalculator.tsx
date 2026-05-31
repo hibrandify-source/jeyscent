@@ -92,37 +92,36 @@ export default function ShippingCalculator({
       )}
 
       {/* Shipping Info — Outside Lagos (park pickup) */}
-{area && zone && zone.isParkPickup && (
-  <div className="mt-3 p-3 bg-amber-50 border border-amber-100 animate-fade-in">
-    <div className="flex items-start gap-2">
-      <span className="text-base mt-0.5">🚌</span>
-      <div>
-        <p className="text-sm font-medium text-amber-900 mb-1">
-          {zone.name} — Park Pickup
-        </p>
-        <p className="text-xs text-amber-800 leading-relaxed mb-2">
-          Your order will be shipped to the nearest bus park in your city.
-          A flat logistics fee of <strong>₦3,500</strong> covers delivery
-          from our store to the bus park.
-        </p>
-        <p className="text-xs text-amber-800 leading-relaxed">
-          Pickup fee from the bus park to your location is negotiated
-          directly between you and the bus driver.
-        </p>
-        <p className="text-[10px] text-amber-700 mt-2">
-          💬 Need help? Chat with us on WhatsApp for guidance.
-        </p>
-      </div>
-    </div>
-  </div>
-)}
+      {area && zone && zone.isParkPickup && (
+        <div className="mt-3 p-3 bg-amber-50 border border-amber-100 animate-fade-in">
+          <div className="flex items-start gap-2">
+            <span className="text-base mt-0.5">🚌</span>
+            <div>
+              <p className="text-sm font-medium text-amber-900 mb-1">
+                {zone.name} — Park Pickup
+              </p>
+              <p className="text-xs text-amber-800 leading-relaxed mb-2">
+                Your order will be shipped to the nearest bus park in your city.
+                A flat logistics fee of <strong>₦3,500</strong> covers delivery
+                from our store to the bus park.
+              </p>
+              <p className="text-xs text-amber-800 leading-relaxed">
+                Pickup fee from the bus park to your location is negotiated
+                directly between you and the bus driver.
+              </p>
+              <p className="text-[10px] text-amber-700 mt-2">
+                💬 Need help? Chat with us on WhatsApp for guidance.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Unknown area */}
       {area && !zone && area.length >= 3 && (
         <div className="mt-3 p-3 bg-yellow-50 border border-yellow-100">
           <p className="text-xs text-yellow-800">
-            We couldn&apos;t find your area. Your order will be shipped to the
-            nearest bus park. Contact us on WhatsApp for details.
+            Your order will be shipped to the nearest bus park. Contact us on WhatsApp for details.
           </p>
         </div>
       )}
