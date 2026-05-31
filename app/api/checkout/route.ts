@@ -8,13 +8,10 @@ import {
   sendWelcomeEmail,
 } from "@/lib/email";
 import { cookies } from "next/headers";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/db"; // ✅ use the singleton — no new PrismaClient() here
 
 function generatePassword(): string {
-  const chars =
-    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   let password = "";
   for (let i = 0; i < 10; i++) {
     password += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -26,7 +23,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // ── Debug log so you can see exactly what arrives ──────────────────────
     console.log("[checkout] POST body:", JSON.stringify(body, null, 2));
 
     const {
@@ -48,14 +44,13 @@ export async function POST(request: NextRequest) {
 
     const isPickup = deliveryMethod === "pickup";
 
-    // ── Core field validation ───────────────────────────────────────────────
+    // ── Core field validation ──────────────────────────────────────────────
     const missing: string[] = [];
-    if (!name)          missing.push("name");
-    if (!email)         missing.push("email");
-    if (!phone)         missing.push("phone");
-    // Use != null so that a genuine 0 total is still caught, but "falsy" strings aren't
+    if (!name)                        missing.push("name");
+    if (!email)                       missing.push("email");
+    if (!phone)                       missing.push("phone");
     if (total == null || total === "") missing.push("total");
-    if (!items?.length) missing.push("items");
+    if (!items?.length)               missing.push("items");
 
     if (missing.length > 0) {
       console.error("[checkout] Missing required fields:", missing);
@@ -65,7 +60,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Address validation only for delivery orders ─────────────────────────
+    // ── Address validation only for delivery orders ────────────────────────
     if (!isPickup && (!shippingAddress || !shippingCity || !shippingState)) {
       console.error("[checkout] Missing delivery address fields");
       return NextResponse.json(
@@ -74,14 +69,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Safe resolved values ────────────────────────────────────────────────
-    const resolvedAddress = isPickup
-      ? "Self Pickup / Customer Rider"
-      : shippingAddress;
-    const resolvedCity  = isPickup ? "N/A" : shippingCity;
-    const resolvedState = isPickup ? "N/A" : shippingState;
+    // ── Safe resolved values ───────────────────────────────────────────────
+    const resolvedAddress = isPickup ? "Self Pickup / Customer Rider" : shippingAddress;
+    const resolvedCity    = isPickup ? "N/A" : shippingCity;
+    const resolvedState   = isPickup ? "N/A" : shippingState;
 
-    // ── Duplicate order guard ───────────────────────────────────────────────
+    // ── Duplicate order guard ──────────────────────────────────────────────
     if (paymentRef) {
       const existingOrder = await prisma.order.findFirst({
         where: { paymentRef },
@@ -97,7 +90,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── User resolution ─────────────────────────────────────────────────────
+    // ── User resolution ────────────────────────────────────────────────────
     let userId: string | null = null;
     let newAccount = false;
     let tempPassword: string | null = null;
@@ -143,7 +136,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── Create the order ────────────────────────────────────────────────────
+    // ── Create the order ───────────────────────────────────────────────────
     const orderId = await createOrder({
       userId,
       total,
@@ -158,7 +151,7 @@ export async function POST(request: NextRequest) {
 
     console.log("[checkout] Order created:", orderId);
 
-    // ── Email ───────────────────────────────────────────────────────────────
+    // ── Emails ─────────────────────────────────────────────────────────────
     const displayAddress = isPickup
       ? "Self Pickup — our team will contact you via WhatsApp with pickup details"
       : `${resolvedAddress}, ${resolvedCity}, ${resolvedState}`;
@@ -172,8 +165,7 @@ export async function POST(request: NextRequest) {
       shippingAddress: displayAddress,
       shippingFee: shippingFee || 0,
       isParkPickup: isParkPickup || false,
-      deliveryEstimate:
-        deliveryEstimate || (isPickup ? "Customer arranges pickup" : ""),
+      deliveryEstimate: deliveryEstimate || (isPickup ? "Customer arranges pickup" : ""),
     };
 
     sendOrderConfirmation(emailData).catch(console.error);
