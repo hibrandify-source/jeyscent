@@ -9,16 +9,16 @@ async function requireAdmin() {
   return user;
 }
 
-// PUT — update a blog post
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     if (!await requireAdmin()) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    const { id } = await params;
     const body = await request.json();
     const { title, slug, excerpt, content, image, author } = body;
 
@@ -27,7 +27,7 @@ export async function PUT(
     }
 
     const post = await prisma.blogPost.update({
-      where: { id: params.id },
+      where: { id },
       data: { title, slug, excerpt, content, image, author },
     });
 
@@ -38,17 +38,17 @@ export async function PUT(
   }
 }
 
-// DELETE — delete a blog post
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     if (!await requireAdmin()) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await prisma.blogPost.delete({ where: { id: params.id } });
+    const { id } = await params;
+    await prisma.blogPost.delete({ where: { id } });
 
     return NextResponse.json({ message: "Post deleted" });
   } catch (error) {
