@@ -132,7 +132,7 @@ export default function Footer() {
               Get in Touch
             </h5>
             <ul className="space-y-3">
-              <li className="text-white/40 text-sm">hello@jeyscent.com</li>
+              <li className="text-white/40 text-sm">jeyscentng@gmail.com</li>
               <li className="text-white/40 text-sm">Lagos, Nigeria</li>
               <li>
                 <a
