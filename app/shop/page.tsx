@@ -112,7 +112,7 @@ export default function ShopPage() {
           </h1>
           <p className="text-white/60 text-sm max-w-md mx-auto">
             {fragrance === "all"
-              ? "Explore our signature fragrances — Ruth & Proverbs — across reed diffusers, car diffusers, room diffusers, and room sprays."
+              ? "Explore our signature fragrances — Ruth & Proverbs — across reed diffusers, car diffusers, room sprays, and refill bottles."
               : fragrance.toLowerCase() === "ruth"
                 ? "Discover the warm, devoted fragrance of Ruth across our full collection."
                 : "Explore the bold, empowering fragrance of Proverbs across our full collection."}
