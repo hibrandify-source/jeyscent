@@ -36,7 +36,7 @@ export default function HomePage() {
               <em className="italic font-normal">Speak Softly</em>
             </h1>
             <p className="text-sm sm:text-base text-white/60 max-w-lg mx-auto mb-10 leading-relaxed">
-              Calm, fresh, and a little bit luxurious — our signature
+              Calm, fresh, and a little bit luxurious. Our signature
               fragrances transform your everyday spaces into something
               beautiful.
             </p>
@@ -189,7 +189,6 @@ export default function HomePage() {
             </Link>
           </div>
 
-          {/* FIXED: priority prop added — first 2 load eagerly */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-12 stagger-children">
             {featured.map((product, index) => (
               <ProductCard
@@ -235,7 +234,7 @@ export default function HomePage() {
                   "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1776766381/car_diffuser_wswkto.jpg",
               },
               {
-                title: "Refill bottles",
+                title: "Refill Bottles",
                 subtitle: "Lasts up to 3 months",
                 href: "/shop?type=refill-bottle",
                 image:
@@ -306,7 +305,7 @@ export default function HomePage() {
               <p className="text-white/50 leading-relaxed mb-4">
                 Jeyscent started during a pregnancy when every scent became
                 too much. All I wanted was something soft, calm, and
-                beautiful — something that would make a space feel like peace
+                beautiful; something that would make a space feel like peace
                 again.
               </p>
               <p className="text-white/50 leading-relaxed mb-4">
@@ -316,7 +315,7 @@ export default function HomePage() {
                 mine.&rdquo;
               </p>
               <p className="text-white/50 leading-relaxed mb-8">
-                So Jeyscent became that — a mix of purpose, faith, growth,
+                So Jeyscent became a mix of purpose, faith, growth,
                 and a little bit of &ldquo;let me try this and see.&rdquo;
               </p>
               <Link
@@ -345,7 +344,7 @@ export default function HomePage() {
           <div className="luxury-divider mx-auto mt-4 mb-8" />
           <p className="text-muted leading-relaxed max-w-xl mx-auto mb-10">
             Set it and forget it. Our quarterly subscription delivers a fresh
-            room diffuser to your door every 3 months — so your space always
+            reed diffuser to your door every 3 months — so your space always
             smells like intention.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-8 mb-10">
@@ -388,7 +387,7 @@ export default function HomePage() {
           <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
             {[
               {
-                text: "My living room has never smelled this good. The Ruth reed diffuser is everything — soft, warm, and so calming. I get compliments every time someone walks in.",
+                text: "My living room has never smelled this good. The Ruth reed diffuser is everything, it is soft, warm, and so calming. I get compliments every time someone walks in.",
                 name: "Adaeze O.",
                 location: "Lagos",
               },
@@ -398,7 +397,7 @@ export default function HomePage() {
                 location: "Abuja",
               },
               {
-                text: "The quarterly subscription is genius. I never have to think about it — my fresh diffuser just arrives and my home stays beautiful. Thank you, Jey Scent!",
+                text: "The quarterly subscription is genius. I never have to think about it because my fresh diffuser just arrives and my home stays beautiful. Thank you, Jey Scent!",
                 name: "Blessing E.",
                 location: "Port Harcourt",
               },
@@ -430,55 +429,107 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ============ INSTAGRAM / VISUAL STRIP ============ */}
+      {/* ============ INSTAGRAM SECTION ============ */}
       <section className="py-16 bg-light-gray">
-        <div className="text-center mb-10">
-          <p className="text-[10px] uppercase tracking-[5px] text-muted mb-2">
-            @jeyscent
-          </p>
-          <h3
-            className="text-xl tracking-wide"
-            style={{ fontFamily: "'Playfair Display', serif" }}
-          >
-            Follow the Journey
-          </h3>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-1">
-          {[
-            "https://images.unsplash.com/photo-1615529328331-f8917597711f?w=400&q=80",
-            "https://images.unsplash.com/photo-1600369672770-985fd30004eb?w=400&q=80",
-            "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=400&q=80",
-            "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=400&q=80",
-            "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=400&q=80",
-            "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&q=80",
-          ].map((src, i) => (
+        <div className="max-w-7xl mx-auto px-6 lg:px-12">
+          <div className="text-center mb-10">
+            <p className="text-[10px] uppercase tracking-[5px] text-muted mb-2">
+              @jeyscent
+            </p>
+            <h3
+              className="text-xl tracking-wide"
+              style={{ fontFamily: "'Playfair Display', serif" }}
+            >
+              Follow the Journey
+            </h3>
+          </div>
+
+          {/* Grid using your Cloudinary images — each links to exact IG post */}
+          <div className="grid grid-cols-3 lg:grid-cols-6 gap-1">
+            {[
+              {
+                image: "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1780227732/IG1_wwaimi.jpg",
+                href: "https://www.instagram.com/p/DUh5h-WjcPS/?igsh=MTVqY3VqN2c3ODJ5NA==",
+              },
+              {
+                image: "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1780227723/IG2_ijxi4d.jpg",
+                href: "https://www.instagram.com/p/DXJ2PXwjayg/?igsh=NjM3NjVtY2ZldGw2",
+              },
+              {
+                image: "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1780227712/IG3_ynco7y.jpg",
+                href: "https://instagram.com/p/DXHHk7kjRmZ/",
+              },
+              {
+                image: "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1780227700/IG4_hkrqit.jpg",
+                href: "https://www.instagram.com/p/DWRt_TuDWD_/?igsh=NWgwdzg1NGd4bzh1",
+              },
+              {
+                image: "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1780227687/IG5_hsxpyr.jpg",
+                href: "https://www.instagram.com/p/DO1WCWrjc29/?igsh=MWhyNTQzNjcza243Zg==",
+              },
+              {
+                image: "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1780227671/IG6_xf1p5i.jpg",
+                href: "https://www.instagram.com/p/DNvmCl6WhQ-/?img_index=1&igsh=M3h0amZ3N2E3eXls",
+              },
+            ].map((post, i) => (
+              <a
+                key={i}
+                href={post.href}
+                target="_blank"
+                rel="noreferrer"
+                className="group relative aspect-square overflow-hidden bg-light-gray"
+              >
+                <Image
+                  src={post.image}
+                  alt="JeyScent on Instagram"
+                  fill
+                  className="object-cover transition-transform duration-700 group-hover:scale-110"
+                  sizes="(max-width: 768px) 33vw, 16vw"
+                />
+                {/* Dark overlay on hover */}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-all duration-500" />
+
+                {/* Instagram icon appears on hover */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                  <svg
+                    width="28"
+                    height="28"
+                    viewBox="0 0 24 24"
+                    fill="white"
+                  >
+                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
+                  </svg>
+                  <span className="text-white text-[9px] uppercase tracking-[3px] mt-2">
+                    View Post
+                  </span>
+                </div>
+              </a>
+            ))}
+          </div>
+
+          {/* Follow button */}
+          <div className="text-center mt-8">
             <a
-              key={i}
-              href="https://instagram.com/jeyscent"
+              href="https://www.instagram.com/jeyscent"
               target="_blank"
               rel="noreferrer"
-              className="relative aspect-square overflow-hidden group"
+              className="inline-flex items-center gap-3 border border-black px-8 py-3 text-[11px] uppercase tracking-[4px] hover:bg-black hover:text-white transition-all duration-300"
             >
-              <Image
-                src={src}
-                alt="Instagram"
-                fill
-                className="object-cover transition-transform duration-500 group-hover:scale-110"
-                sizes="(max-width: 768px) 50vw, 16vw"
-              />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-300 flex items-center justify-center">
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="white"
-                  className="opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                >
-                  <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
-                </svg>
-              </div>
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              >
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                <circle cx="12" cy="12" r="4" />
+                <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+              </svg>
+              Follow @jeyscent
             </a>
-          ))}
+          </div>
         </div>
       </section>
     </div>

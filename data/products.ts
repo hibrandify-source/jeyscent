@@ -49,7 +49,7 @@ export const products: Product[] = [
     sizes: [
       { size: "50ml", price: 10100, inStock: true },
       { size: "100ml", price: 14500, inStock: true },
-      { size: "250ml", price: 20700, inStock: true },
+      { size: "200ml", price: 20700, inStock: true },
     ],
     description:
       "A soft, comforting blend that fills your space with warmth, calm, and gentle sweetness. Delicate yet memorable — like home in a bottle.",
@@ -134,7 +134,7 @@ export const products: Product[] = [
     type: "Refill Bottle",
     sizes: [
       { size: "100ml", price: 12500, inStock: true },
-      { size: "250ml", price: 18000, inStock: true },
+      { size: "250ml", price: 22100, inStock: true },
     ],
     description:
       "A soft and comforting refill designed to keep your space consistently warm, cozy, and beautifully scented.",
@@ -163,7 +163,7 @@ export const products: Product[] = [
     sizes: [
       { size: "50ml", price: 11000, inStock: true },
       { size: "100ml", price: 16000, inStock: true },
-      { size: "250ml", price: 24000, inStock: true },
+      { size: "200ml", price: 24000, inStock: true },
     ],
     description:
       "Bold, rich, and luxurious — a statement fragrance designed to leave a lasting impression.",
@@ -245,7 +245,7 @@ export const products: Product[] = [
     type: "Refill Bottle",
     sizes: [
       { size: "100ml", price: 14000, inStock: true },
-      { size: "250ml", price: 22000, inStock: true },
+      { size: "250ml", price: 26500, inStock: true },
     ],
     description:
       "A rich and luxurious refill crafted to keep your space bold, warm, and unforgettable.",

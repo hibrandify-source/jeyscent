@@ -94,11 +94,12 @@ export default function SubscribePage() {
       <section className="relative py-20 lg:py-28 bg-black text-white overflow-hidden">
         <div className="absolute inset-0 opacity-30">
           <Image
-            src="https://images.unsplash.com/photo-1600369672770-985fd30004eb?w=1800&q=80"
+            src="https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1780227723/IG2_ijxi4d.jpg"
             alt="Diffuser ambiance"
             fill
             className="object-cover"
             sizes="100vw"
+            unoptimized
           />
         </div>
         <div className="relative z-10 max-w-3xl mx-auto px-6 text-center">
@@ -112,7 +113,7 @@ export default function SubscribePage() {
             Subscribe & Save 10%
           </h1>
           <p className="text-white/50 max-w-xl mx-auto leading-relaxed">
-            Fresh room diffuser delivered to your door every 3 months. No
+            Fresh reed diffuser delivered to your door every 3 months. No
             thinking, no running out — just a space that always smells
             beautiful.
           </p>

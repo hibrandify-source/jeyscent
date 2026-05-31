@@ -61,7 +61,7 @@ export default function OurStoryPage() {
             <p className="text-lg text-charcoal leading-[1.9] mb-6">
               Scents I never noticed before became too strong, too harsh, or
               just uncomfortable. And all I wanted was something soft, calm,
-              and beautiful — something that would make a space feel like
+              and beautiful; something that would make a space feel like
               peace again.
             </p>
             <p className="text-lg text-charcoal leading-[1.9] font-medium">
@@ -172,7 +172,7 @@ export default function OurStoryPage() {
           {/* Jeyscent Became */}
           <div className="mb-16">
             <p className="text-lg text-charcoal leading-[1.9] mb-6">
-              So Jeyscent became that — a mix of purpose, faith, growth, and
+              So Jeyscent became a mix of purpose, faith, growth, and
               a little bit of &ldquo;let me try this and see&rdquo; 
             </p>
             <p className="text-lg text-charcoal leading-[1.9] mb-6">
