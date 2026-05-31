@@ -1,4 +1,3 @@
-// app/api/checkout/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { createOrder, createUser, getUserByEmail } from "@/lib/db";
@@ -33,23 +32,24 @@ export async function POST(request: NextRequest) {
       shippingAddress,
       shippingCity,
       shippingState,
+      deliveryMethod,  // ✅ new field from checkout page
       paymentRef,
       total,
       shippingFee,
       isParkPickup,
       deliveryEstimate,
       items,
-      createAccount = false, // ✅ Changed default to false
+      createAccount = false,
     } = body;
 
-    // Validate
+    const isPickup = deliveryMethod === "pickup";
+
+    // ✅ Fix: only validate address fields when delivery method is chosen
+    // Pickup orders don't need address fields
     if (
       !name ||
       !email ||
       !phone ||
-      !shippingAddress ||
-      !shippingCity ||
-      !shippingState ||
       !total ||
       !items?.length
     ) {
@@ -58,6 +58,21 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // ✅ Only validate address fields for delivery orders
+    if (!isPickup && (!shippingAddress || !shippingCity || !shippingState)) {
+      return NextResponse.json(
+        { error: "Missing required delivery address fields" },
+        { status: 400 }
+      );
+    }
+
+    // ✅ Safe values — fallback for pickup orders
+    const resolvedAddress = isPickup
+      ? "Self Pickup / Customer Rider"
+      : shippingAddress;
+    const resolvedCity = isPickup ? "N/A" : shippingCity;
+    const resolvedState = isPickup ? "N/A" : shippingState;
 
     // Prevent duplicate orders with same payment reference
     if (paymentRef) {
@@ -82,16 +97,13 @@ export async function POST(request: NextRequest) {
     const currentUser = await getCurrentUser();
 
     if (currentUser) {
-      // ✅ User is logged in - use their account
       userId = currentUser.id;
     } else {
       const existingUser = await getUserByEmail(email);
 
       if (existingUser) {
-        // ✅ Existing user found - use their account
         userId = existingUser.id;
       } else if (createAccount) {
-        // ✅ NEW: Only create account if customer explicitly opted in
         tempPassword = generatePassword();
         const hashedPw = await hashPassword(tempPassword);
         const newUser = await createUser(name, email, hashedPw);
@@ -114,19 +126,12 @@ export async function POST(request: NextRequest) {
           path: "/",
         });
       } else {
-        // ✅ FIXED: Guest checkout - no account created
-        // We need to handle this based on your Prisma schema
-        // Option 1: Make userId optional in Order schema (recommended)
-        // Option 2: Create a generic "guest" user and associate all guest orders
-        
-        // For now, we'll create a minimal account but NOT log them in or notify them
-        // This is needed if your Order table requires userId
+        // Guest checkout — create silent account
         tempPassword = generatePassword();
         const hashedPw = await hashPassword(tempPassword);
         const newUser = await createUser(name, email, hashedPw);
         userId = newUser.id;
-        // newAccount stays false - no welcome email, no notification to user
-        // The account exists but user doesn't know about it (not ideal but works)
+        // newAccount stays false — no welcome email sent
       }
     }
 
@@ -135,13 +140,18 @@ export async function POST(request: NextRequest) {
       userId,
       total,
       paymentRef,
-      shippingAddress,
-      shippingCity,
-      shippingState,
+      shippingAddress: resolvedAddress,
+      shippingCity: resolvedCity,
+      shippingState: resolvedState,
       phone,
       email,
       items,
     });
+
+    // ✅ Email shows appropriate address based on delivery method
+    const displayAddress = isPickup
+      ? "Self Pickup — our team will contact you via WhatsApp with pickup details"
+      : `${resolvedAddress}, ${resolvedCity}, ${resolvedState}`;
 
     const emailData = {
       customerName: name,
@@ -149,16 +159,15 @@ export async function POST(request: NextRequest) {
       orderId,
       items,
       total,
-      shippingAddress: `${shippingAddress}, ${shippingCity}, ${shippingState}`,
+      shippingAddress: displayAddress,
       shippingFee: shippingFee || 0,
       isParkPickup: isParkPickup || false,
-      deliveryEstimate: deliveryEstimate || "",
+      deliveryEstimate: deliveryEstimate || (isPickup ? "Customer arranges pickup" : ""),
     };
 
     sendOrderConfirmation(emailData).catch(console.error);
     sendAdminNotification(emailData).catch(console.error);
 
-    // ✅ Only send welcome email if user explicitly opted in
     if (newAccount && tempPassword) {
       sendWelcomeEmail({
         name,

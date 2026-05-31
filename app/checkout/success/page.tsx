@@ -17,6 +17,7 @@ interface CheckoutData {
     city: string;
     state: string;
   };
+  deliveryMethod: "delivery" | "pickup";
   items: {
     productId: string;
     name: string;
@@ -110,8 +111,7 @@ export default function CheckoutSuccessPage() {
 
       if (!verifyRes.ok || !verifyData.verified) {
         setError(
-          `Payment could not be verified (Status: ${
-            verifyData.status || "unknown"
+          `Payment could not be verified (Status: ${verifyData.status || "unknown"
           }). Reference: ${reference}. Please contact support.`
         );
         setStatus("error");
@@ -128,9 +128,12 @@ export default function CheckoutSuccessPage() {
           name: checkoutData.form.name,
           email: checkoutData.form.email,
           phone: checkoutData.form.phone,
-          shippingAddress: `${checkoutData.form.address}, ${checkoutData.form.area}`,
-          shippingCity: checkoutData.form.city,
-          shippingState: checkoutData.form.state,
+          deliveryMethod: checkoutData.deliveryMethod, // ✅ pass this
+          shippingAddress: checkoutData.deliveryMethod === "pickup"
+            ? "Self Pickup / Customer Rider"
+            : `${checkoutData.form.address}, ${checkoutData.form.area}`,
+          shippingCity: checkoutData.form.city || "N/A",
+          shippingState: checkoutData.form.state || "N/A",
           paymentRef: reference,
           total: checkoutData.grandTotal,
           shippingFee: checkoutData.shippingFee,
@@ -162,8 +165,8 @@ export default function CheckoutSuccessPage() {
       } else {
         setError(
           orderData.error ||
-            "Failed to create order. Payment was successful — please contact support with reference: " +
-              reference
+          "Failed to create order. Payment was successful — please contact support with reference: " +
+          reference
         );
         setStatus("error");
       }
