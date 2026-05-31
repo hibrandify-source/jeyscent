@@ -9,11 +9,15 @@ import { getShippingFee, shippingZones } from "@/lib/shipping";
 import ShippingCalculator from "@/components/ShippingCalculator";
 import Image from "next/image";
 
+type DeliveryMethod = "delivery" | "pickup";
+
 export default function CheckoutPage() {
   const { items, totalPrice, clearCart } = useCart();
   const { user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("delivery");
 
   const [form, setForm] = useState({
     name: "",
@@ -31,9 +35,7 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (searchParams.get("payment") === "failed") {
-      setError(
-        "Payment was not completed. Please try again or contact support."
-      );
+      setError("Payment was not completed. Please try again or contact support.");
     }
   }, [searchParams]);
 
@@ -50,16 +52,17 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (items.length === 0 && !processing) {
       const saved = localStorage.getItem("jeyscent_checkout");
-      if (!saved) {
-        router.push("/cart");
-      }
+      if (!saved) router.push("/cart");
     }
     setIsChecking(false);
   }, [items, router, processing]);
 
   const shipping = useMemo(() => {
+    if (deliveryMethod === "pickup") {
+      return { fee: 0, freeShipping: false, isParkPickup: false, zone: null };
+    }
     return getShippingFee(form.area, totalPrice);
-  }, [form.area, totalPrice]);
+  }, [form.area, totalPrice, deliveryMethod]);
 
   const grandTotal = totalPrice + shipping.fee;
 
@@ -76,16 +79,8 @@ export default function CheckoutPage() {
   };
 
   const validateForm = () => {
-    if (
-      !form.name ||
-      !form.email ||
-      !form.phone ||
-      !form.address ||
-      !form.area ||
-      !form.city ||
-      !form.state
-    ) {
-      setError("Please fill in all fields including your area");
+    if (!form.name || !form.email || !form.phone) {
+      setError("Please fill in your name, email and phone number");
       return false;
     }
     if (!/\S+@\S+\.\S+/.test(form.email)) {
@@ -95,6 +90,13 @@ export default function CheckoutPage() {
     if (form.phone.length < 10) {
       setError("Please enter a valid phone number");
       return false;
+    }
+    // Only require address fields if delivery selected
+    if (deliveryMethod === "delivery") {
+      if (!form.address || !form.area || !form.city || !form.state) {
+        setError("Please fill in all delivery address fields including your area");
+        return false;
+      }
     }
     return true;
   };
@@ -106,8 +108,14 @@ export default function CheckoutPage() {
     setProcessing(true);
 
     try {
+      const shippingAddress =
+        deliveryMethod === "pickup"
+          ? "Self Pickup / Customer Rider"
+          : `${form.address}, ${form.area}`;
+
       const checkoutData = {
         form,
+        deliveryMethod,
         items: items.map((item) => ({
           productId: item.productId,
           name: item.name,
@@ -120,15 +128,15 @@ export default function CheckoutPage() {
         grandTotal,
         shippingFee: shipping.fee,
         isParkPickup: shipping.isParkPickup,
-        deliveryEstimate: shipping.zone?.estimatedDays || "",
+        deliveryEstimate:
+          deliveryMethod === "pickup"
+            ? "Customer arranges pickup"
+            : shipping.zone?.estimatedDays || "",
         createAccount,
         savedAt: Date.now(),
       };
 
-      localStorage.setItem(
-        "jeyscent_checkout",
-        JSON.stringify(checkoutData)
-      );
+      localStorage.setItem("jeyscent_checkout", JSON.stringify(checkoutData));
 
       const res = await fetch("/api/payment/initialize", {
         method: "POST",
@@ -137,30 +145,18 @@ export default function CheckoutPage() {
           amount: grandTotal,
           email: form.email,
           name: form.name,
-          metadata: {
-            customer_phone: form.phone,
-          },
+          metadata: { customer_phone: form.phone },
         }),
       });
 
       const data = await res.json();
 
       if (res.ok && data.authorization_url) {
-        const updated = {
-          ...checkoutData,
-          paymentRef: data.reference,
-        };
-        localStorage.setItem(
-          "jeyscent_checkout",
-          JSON.stringify(updated)
-        );
-
-        // Redirect to QorePay hosted checkout page
+        const updated = { ...checkoutData, paymentRef: data.reference };
+        localStorage.setItem("jeyscent_checkout", JSON.stringify(updated));
         window.location.href = data.authorization_url;
       } else {
-        setError(
-          data.error || "Failed to initialize payment. Please try again."
-        );
+        setError(data.error || "Failed to initialize payment. Please try again.");
         setProcessing(false);
       }
     } catch {
@@ -214,8 +210,9 @@ export default function CheckoutPage() {
         )}
 
         <div className="grid lg:grid-cols-5 gap-12 lg:gap-16">
-          {/* Form */}
+          {/* ── Form ── */}
           <div className="lg:col-span-3">
+
             {/* Personal Info */}
             <div className="mb-10">
               <h3 className="text-lg tracking-wide mb-6 font-serif">
@@ -263,65 +260,155 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            {/* Shipping */}
+            {/* ── Delivery Method Selector ── */}
             <div className="mb-10">
               <h3 className="text-lg tracking-wide mb-6 font-serif">
-                Delivery Address
+                Delivery Method
               </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[3px] text-muted mb-2">
-                    Street Address
-                  </label>
-                  <input
-                    type="text"
-                    value={form.address}
-                    onChange={(e) => handleUpdate("address", e.target.value)}
-                    className="w-full border border-gray-200 px-4 py-3.5 text-sm focus:outline-none focus:border-black transition-colors"
-                    placeholder="123 Your Street"
-                  />
+              <div className="grid grid-cols-2 gap-4">
+                {/* Option 1 — We Deliver */}
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMethod("delivery")}
+                  className={`relative border p-5 text-left transition-all duration-200 ${deliveryMethod === "delivery"
+                      ? "border-black bg-black text-white"
+                      : "border-gray-200 hover:border-gray-400 bg-white"
+                    }`}
+                >
+                  {/* Check mark */}
+                  {deliveryMethod === "delivery" && (
+                    <div className="absolute top-3 right-3 w-5 h-5 bg-white rounded-full flex items-center justify-center">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </div>
+                  )}
+                  {/* Truck icon */}
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    className="mb-3"
+                  >
+                    <rect x="1" y="3" width="15" height="13" />
+                    <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+                    <circle cx="5.5" cy="18.5" r="2.5" />
+                    <circle cx="18.5" cy="18.5" r="2.5" />
+                  </svg>
+                  <p className="text-sm font-semibold mb-1">We Deliver</p>
+                  <p className={`text-xs leading-relaxed ${deliveryMethod === "delivery" ? "text-white/60" : "text-muted"}`}>
+                    We bring it to your door. Fee calculated by area.
+                  </p>
+                </button>
+
+                {/* Option 2 — Self Pickup */}
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMethod("pickup")}
+                  className={`relative border p-5 text-left transition-all duration-200 ${deliveryMethod === "pickup"
+                      ? "border-black bg-black text-white"
+                      : "border-gray-200 hover:border-gray-400 bg-white"
+                    }`}
+                >
+                  {/* Check mark */}
+                  {deliveryMethod === "pickup" && (
+                    <div className="absolute top-3 right-3 w-5 h-5 bg-white rounded-full flex items-center justify-center">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </div>
+                  )}
+                  {/* Person icon */}
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    className="mb-3"
+                  >
+                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                  <p className="text-sm font-semibold mb-1">My Rider / Pickup</p>
+                  <p className={`text-xs leading-relaxed ${deliveryMethod === "pickup" ? "text-white/60" : "text-muted"}`}>
+                    Send your rider or pick up yourself. No delivery fee.
+                  </p>
+                </button>
+              </div>
+
+              {/* Pickup notice */}
+              {deliveryMethod === "pickup" && (
+                <div className="mt-4 p-4 bg-amber-50 border border-amber-100 text-amber-800 text-xs leading-relaxed">
+                  <strong>Pickup Note:</strong> After payment, we&apos;ll contact you via WhatsApp with the pickup address and to coordinate your rider&apos;s arrival time.
                 </div>
+              )}
+            </div>
 
-                <ShippingCalculator
-                  area={form.area}
-                  onAreaChange={(val) => handleUpdate("area", val)}
-                  cartTotal={totalPrice}
-                />
-
-                <div className="grid sm:grid-cols-2 gap-4">
+            {/* ── Delivery Address (only shown when delivery selected) ── */}
+            {deliveryMethod === "delivery" && (
+              <div className="mb-10">
+                <h3 className="text-lg tracking-wide mb-6 font-serif">
+                  Delivery Address
+                </h3>
+                <div className="space-y-4">
                   <div>
                     <label className="block text-[10px] uppercase tracking-[3px] text-muted mb-2">
-                      City
+                      Street Address
                     </label>
                     <input
                       type="text"
-                      value={form.city}
-                      onChange={(e) => handleUpdate("city", e.target.value)}
+                      value={form.address}
+                      onChange={(e) => handleUpdate("address", e.target.value)}
                       className="w-full border border-gray-200 px-4 py-3.5 text-sm focus:outline-none focus:border-black transition-colors"
-                      placeholder="Lagos"
+                      placeholder="123 Your Street"
                     />
                   </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[3px] text-muted mb-2">
-                      State
-                    </label>
-                    <select
-                      value={form.state}
-                      onChange={(e) => handleUpdate("state", e.target.value)}
-                      className="w-full border border-gray-200 px-4 py-3.5 text-sm focus:outline-none focus:border-black transition-colors bg-white"
-                    >
-                      <option value="">Select State</option>
-                      {nigerianStates.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
+
+                  <ShippingCalculator
+                    area={form.area}
+                    onAreaChange={(val) => handleUpdate("area", val)}
+                    cartTotal={totalPrice}
+                  />
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-[3px] text-muted mb-2">
+                        City
+                      </label>
+                      <input
+                        type="text"
+                        value={form.city}
+                        onChange={(e) => handleUpdate("city", e.target.value)}
+                        className="w-full border border-gray-200 px-4 py-3.5 text-sm focus:outline-none focus:border-black transition-colors"
+                        placeholder="Lagos"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-[3px] text-muted mb-2">
+                        State
+                      </label>
+                      <select
+                        value={form.state}
+                        onChange={(e) => handleUpdate("state", e.target.value)}
+                        className="w-full border border-gray-200 px-4 py-3.5 text-sm focus:outline-none focus:border-black transition-colors bg-white"
+                      >
+                        <option value="">Select State</option>
+                        {nigerianStates.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
 
+            {/* Create Account */}
             {!user && (
               <div className="mb-8">
                 <label className="flex items-start gap-3 cursor-pointer group">
@@ -339,20 +426,12 @@ export default function CheckoutPage() {
                         }`}
                     >
                       {createAccount && (
-                        <svg
-                          width="10"
-                          height="10"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="white"
-                          strokeWidth="3"
-                        >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
                       )}
                     </div>
                   </div>
-
                   <div>
                     <p className="text-sm text-charcoal font-medium mb-0.5">
                       Create an account to track my order
@@ -367,29 +446,29 @@ export default function CheckoutPage() {
               </div>
             )}
 
+            {/* Mobile Pay Button */}
             <div className="mt-10 lg:hidden">
               <button
                 onClick={handleProceedToPayment}
                 disabled={processing}
                 className="btn-luxury w-full bg-black text-white py-4 text-[11px] uppercase tracking-[4px] hover:bg-charcoal transition-all disabled:opacity-50"
               >
-                {processing
-                  ? "Connecting..."
-                  : `Pay ${formatPrice(grandTotal)}`}
+                {processing ? "Connecting..." : `Pay ${formatPrice(grandTotal)}`}
               </button>
             </div>
           </div>
 
-          {/* Summary */}
+          {/* ── Order Summary ── */}
           <div className="lg:col-span-2">
             <div className="bg-cream p-8 sticky top-28">
               <h3 className="text-lg tracking-wide mb-6 font-serif">
                 Order Summary
               </h3>
 
+              {/* Items */}
               <div className="space-y-4 mb-6 pb-6 border-b border-gray-200">
                 {items.map((item) => {
-                  const itemSalePrice = getSalePrice(item.price);
+                  const salePrice = getSalePrice(item.price);
                   return (
                     <div key={`${item.productId}-${item.size}`} className="flex gap-4">
                       <div className="relative w-16 h-20 overflow-hidden bg-light-gray flex-shrink-0">
@@ -408,24 +487,27 @@ export default function CheckoutPage() {
                         <p className="text-sm font-medium truncate">{item.name}</p>
                         <p className="text-xs text-muted">{item.size}</p>
                       </div>
-                      {/* Show sale price × qty */}
                       <p className="text-sm flex-shrink-0">
-                        {formatPrice(itemSalePrice * item.quantity)}
+                        {formatPrice(salePrice * item.quantity)}
                       </p>
                     </div>
                   );
                 })}
               </div>
 
+              {/* Totals */}
               <div className="space-y-3 mb-6 pb-6 border-b border-gray-200">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted">Subtotal</span>
                   <span>{formatPrice(totalPrice)}</span>
                 </div>
+
                 <div className="flex justify-between text-sm">
                   <span className="text-muted">Delivery</span>
                   <span>
-                    {shipping.freeShipping ? (
+                    {deliveryMethod === "pickup" ? (
+                      <span className="text-green-700 font-medium">Free — My Rider</span>
+                    ) : shipping.freeShipping ? (
                       <span className="text-green-700">Free</span>
                     ) : shipping.isParkPickup ? (
                       <span className="text-amber-700">₦3,500</span>
@@ -436,15 +518,21 @@ export default function CheckoutPage() {
                     )}
                   </span>
                 </div>
-                {shipping.isParkPickup && form.area && (
+
+                {deliveryMethod === "delivery" && shipping.isParkPickup && form.area && (
                   <p className="text-[10px] text-amber-700">
                     🚌 ₦3,500 logistics to bus park + driver fee at pickup
                   </p>
                 )}
-                {shipping.zone && form.area && (
+                {deliveryMethod === "delivery" && shipping.zone && form.area && (
                   <div className="text-[10px] text-muted">
                     📦 {shipping.zone.estimatedDays}
                   </div>
+                )}
+                {deliveryMethod === "pickup" && (
+                  <p className="text-[10px] text-amber-700">
+                    📍 Pickup address will be sent via WhatsApp after payment
+                  </p>
                 )}
               </div>
 
@@ -463,16 +551,8 @@ export default function CheckoutPage() {
                 {processing ? "Connecting..." : "Proceed to Payment"}
               </button>
 
-              {/* ✅ Updated branding from Paystack → QorePay */}
               <div className="mt-4 flex items-center justify-center gap-2 text-muted">
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                   <path d="M7 11V7a5 5 0 0110 0v4" />
                 </svg>
@@ -484,49 +564,45 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        {/* Shipping Zones Info */}
-        <div className="mt-16 pt-12 border-t border-gray-100">
-          <h3 className="text-lg tracking-wide mb-8 font-serif text-center">
-            Delivery Rates
-          </h3>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {shippingZones.map((zone) => (
-              <div
-                key={zone.name}
-                className="p-4 bg-gray-50 border border-gray-100"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-medium">{zone.name}</h4>
-                  <span className="text-sm font-semibold">
-                    {zone.isParkPickup ? (
-                      <span className="text-amber-700 text-xs">
-                        Park pickup
-                      </span>
-                    ) : (
-                      `${zone.fee.toLocaleString()}`
-                    )}
-                  </span>
-                </div>
-                <p className="text-[10px] text-muted mb-2">
-                  {zone.isParkPickup ? "🚌" : ""} {zone.estimatedDays}
-                </p>
-                {zone.isParkPickup && (
-                  <p className="text-[10px] text-amber-700 mb-2">
-                    Fee negotiated with bus driver
+        {/* Shipping Zones Info — only shown when delivery selected */}
+        {deliveryMethod === "delivery" && (
+          <div className="mt-16 pt-12 border-t border-gray-100">
+            <h3 className="text-lg tracking-wide mb-8 font-serif text-center">
+              Delivery Rates
+            </h3>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {shippingZones.map((zone) => (
+                <div key={zone.name} className="p-4 bg-gray-50 border border-gray-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium">{zone.name}</h4>
+                    <span className="text-sm font-semibold">
+                      {zone.isParkPickup ? (
+                        <span className="text-amber-700 text-xs">Park pickup</span>
+                      ) : (
+                        `${zone.fee.toLocaleString()}`
+                      )}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted mb-2">
+                    {zone.isParkPickup ? "🚌" : ""} {zone.estimatedDays}
                   </p>
-                )}
-                <p className="text-[10px] text-muted leading-relaxed">
-                  {zone.areas.slice(0, 5).join(", ")}
-                  {zone.areas.length > 5 &&
-                    ` +${zone.areas.length - 5} more`}
-                </p>
-              </div>
-            ))}
+                  {zone.isParkPickup && (
+                    <p className="text-[10px] text-amber-700 mb-2">
+                      Fee negotiated with bus driver
+                    </p>
+                  )}
+                  <p className="text-[10px] text-muted leading-relaxed">
+                    {zone.areas.slice(0, 5).join(", ")}
+                    {zone.areas.length > 5 && ` +${zone.areas.length - 5} more`}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <p className="text-center text-xs text-muted mt-6">
+              Free shipping on orders above ₦200,000 (within Lagos)
+            </p>
           </div>
-          <p className="text-center text-xs text-muted mt-6">
-            Free shipping on orders above ₦200,000 (within Lagos)
-          </p>
-        </div>
+        )}
       </div>
     </div>
   );
