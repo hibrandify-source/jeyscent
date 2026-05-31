@@ -25,6 +25,10 @@ function generatePassword(): string {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    // ── Debug log so you can see exactly what arrives ──────────────────────
+    console.log("[checkout] POST body:", JSON.stringify(body, null, 2));
+
     const {
       name,
       email,
@@ -32,7 +36,7 @@ export async function POST(request: NextRequest) {
       shippingAddress,
       shippingCity,
       shippingState,
-      deliveryMethod,  // ✅ new field from checkout page
+      deliveryMethod,
       paymentRef,
       total,
       shippingFee,
@@ -44,43 +48,47 @@ export async function POST(request: NextRequest) {
 
     const isPickup = deliveryMethod === "pickup";
 
-    // ✅ Fix: only validate address fields when delivery method is chosen
-    // Pickup orders don't need address fields
-    if (
-      !name ||
-      !email ||
-      !phone ||
-      !total ||
-      !items?.length
-    ) {
+    // ── Core field validation ───────────────────────────────────────────────
+    const missing: string[] = [];
+    if (!name)          missing.push("name");
+    if (!email)         missing.push("email");
+    if (!phone)         missing.push("phone");
+    // Use != null so that a genuine 0 total is still caught, but "falsy" strings aren't
+    if (total == null || total === "") missing.push("total");
+    if (!items?.length) missing.push("items");
+
+    if (missing.length > 0) {
+      console.error("[checkout] Missing required fields:", missing);
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: `Missing required fields: ${missing.join(", ")}` },
         { status: 400 }
       );
     }
 
-    // ✅ Only validate address fields for delivery orders
+    // ── Address validation only for delivery orders ─────────────────────────
     if (!isPickup && (!shippingAddress || !shippingCity || !shippingState)) {
+      console.error("[checkout] Missing delivery address fields");
       return NextResponse.json(
         { error: "Missing required delivery address fields" },
         { status: 400 }
       );
     }
 
-    // ✅ Safe values — fallback for pickup orders
+    // ── Safe resolved values ────────────────────────────────────────────────
     const resolvedAddress = isPickup
       ? "Self Pickup / Customer Rider"
       : shippingAddress;
-    const resolvedCity = isPickup ? "N/A" : shippingCity;
+    const resolvedCity  = isPickup ? "N/A" : shippingCity;
     const resolvedState = isPickup ? "N/A" : shippingState;
 
-    // Prevent duplicate orders with same payment reference
+    // ── Duplicate order guard ───────────────────────────────────────────────
     if (paymentRef) {
       const existingOrder = await prisma.order.findFirst({
         where: { paymentRef },
       });
 
       if (existingOrder) {
+        console.log("[checkout] Duplicate paymentRef — returning existing order:", existingOrder.id);
         return NextResponse.json({
           orderId: existingOrder.id,
           newAccount: false,
@@ -89,11 +97,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ── User resolution ─────────────────────────────────────────────────────
     let userId: string | null = null;
     let newAccount = false;
     let tempPassword: string | null = null;
 
-    // Check if user is logged in
     const currentUser = await getCurrentUser();
 
     if (currentUser) {
@@ -135,7 +143,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create the order
+    // ── Create the order ────────────────────────────────────────────────────
     const orderId = await createOrder({
       userId,
       total,
@@ -148,7 +156,9 @@ export async function POST(request: NextRequest) {
       items,
     });
 
-    // ✅ Email shows appropriate address based on delivery method
+    console.log("[checkout] Order created:", orderId);
+
+    // ── Email ───────────────────────────────────────────────────────────────
     const displayAddress = isPickup
       ? "Self Pickup — our team will contact you via WhatsApp with pickup details"
       : `${resolvedAddress}, ${resolvedCity}, ${resolvedState}`;
@@ -162,18 +172,15 @@ export async function POST(request: NextRequest) {
       shippingAddress: displayAddress,
       shippingFee: shippingFee || 0,
       isParkPickup: isParkPickup || false,
-      deliveryEstimate: deliveryEstimate || (isPickup ? "Customer arranges pickup" : ""),
+      deliveryEstimate:
+        deliveryEstimate || (isPickup ? "Customer arranges pickup" : ""),
     };
 
     sendOrderConfirmation(emailData).catch(console.error);
     sendAdminNotification(emailData).catch(console.error);
 
     if (newAccount && tempPassword) {
-      sendWelcomeEmail({
-        name,
-        email,
-        password: tempPassword,
-      }).catch(console.error);
+      sendWelcomeEmail({ name, email, password: tempPassword }).catch(console.error);
     }
 
     return NextResponse.json({
@@ -182,7 +189,7 @@ export async function POST(request: NextRequest) {
       message: "Order created successfully",
     });
   } catch (error) {
-    console.error("Checkout error:", error);
+    console.error("[checkout] Unexpected error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
