@@ -58,7 +58,6 @@ export default function CheckoutSuccessPage() {
 
   const handlePaymentComplete = async () => {
     try {
-      // Check if already processed (orderId in URL)
       const existingOrderId = searchParams.get("orderId");
       if (existingOrderId) {
         setOrderId(existingOrderId);
@@ -67,7 +66,6 @@ export default function CheckoutSuccessPage() {
         return;
       }
 
-      // Get saved checkout data
       const savedData = localStorage.getItem("jeyscent_checkout");
       if (!savedData) {
         setError("Checkout data not found. Please contact support.");
@@ -77,20 +75,14 @@ export default function CheckoutSuccessPage() {
 
       const checkoutData: CheckoutData = JSON.parse(savedData);
 
-      // Check if data is too old (more than 1 hour)
       if (Date.now() - checkoutData.savedAt > 3600000) {
-        setError(
-          "Checkout session expired. If you were charged, please contact support."
-        );
+        setError("Checkout session expired. If you were charged, please contact support.");
         setStatus("error");
         localStorage.removeItem("jeyscent_checkout");
         return;
       }
 
-      // QorePay passes reference in the redirect URL as ?reference=QP-xxx
-      // Fall back to the reference we saved in localStorage
-      const reference =
-        searchParams.get("reference") || checkoutData.paymentRef;
+      const reference = searchParams.get("reference") || checkoutData.paymentRef;
 
       if (!reference) {
         setError("Payment reference not found. Please contact support.");
@@ -98,7 +90,6 @@ export default function CheckoutSuccessPage() {
         return;
       }
 
-      // Step 1: Verify payment with QorePay
       setStatus("verifying");
 
       const verifyRes = await fetch("/api/payment/verify", {
@@ -111,14 +102,12 @@ export default function CheckoutSuccessPage() {
 
       if (!verifyRes.ok || !verifyData.verified) {
         setError(
-          `Payment could not be verified (Status: ${verifyData.status || "unknown"
-          }). Reference: ${reference}. Please contact support.`
+          `Payment could not be verified (Status: ${verifyData.status || "unknown"}). Reference: ${reference}. Please contact support.`
         );
         setStatus("error");
         return;
       }
 
-      // Step 2: Create order
       setStatus("creating");
 
       const orderRes = await fetch("/api/checkout", {
@@ -128,10 +117,11 @@ export default function CheckoutSuccessPage() {
           name: checkoutData.form.name,
           email: checkoutData.form.email,
           phone: checkoutData.form.phone,
-          deliveryMethod: checkoutData.deliveryMethod, // ✅ pass this
-          shippingAddress: checkoutData.deliveryMethod === "pickup"
-            ? "Self Pickup / Customer Rider"
-            : `${checkoutData.form.address}, ${checkoutData.form.area}`,
+          deliveryMethod: checkoutData.deliveryMethod,
+          shippingAddress:
+            checkoutData.deliveryMethod === "pickup"
+              ? "Self Pickup / Customer Rider"
+              : `${checkoutData.form.address}, ${checkoutData.form.area}`,
           shippingCity: checkoutData.form.city || "N/A",
           shippingState: checkoutData.form.state || "N/A",
           paymentRef: reference,
@@ -158,28 +148,38 @@ export default function CheckoutSuccessPage() {
         setOrderTotal(checkoutData.grandTotal);
         setStatus("success");
 
-        // Clean up
+        // ── Meta Pixel: Purchase ─────────────────────────────────────────
+        if (typeof window !== "undefined" && window.fbq) {
+          window.fbq("track", "Purchase", {
+            value: checkoutData.grandTotal,
+            currency: "NGN",
+            content_ids: checkoutData.items.map((i) => i.productId),
+            content_type: "product",
+            num_items: checkoutData.items.reduce(
+              (sum, i) => sum + i.quantity,
+              0
+            ),
+          });
+        }
+
         localStorage.removeItem("jeyscent_checkout");
         clearCart();
         await refreshUser();
       } else {
         setError(
           orderData.error ||
-          "Failed to create order. Payment was successful — please contact support with reference: " +
-          reference
+            "Failed to create order. Payment was successful — please contact support with reference: " +
+              reference
         );
         setStatus("error");
       }
     } catch (err) {
       console.error("Checkout success error:", err);
-      setError(
-        "Something went wrong. If you were charged, please contact support."
-      );
+      setError("Something went wrong. If you were charged, please contact support.");
       setStatus("error");
     }
   };
 
-  // Verifying / Creating state
   if (status === "verifying" || status === "creating") {
     return (
       <div className="page-transition pt-24 lg:pt-28">
@@ -189,13 +189,11 @@ export default function CheckoutSuccessPage() {
             className="text-2xl mb-3"
             style={{ fontFamily: "'Playfair Display', serif" }}
           >
-            {status === "verifying"
-              ? "Verifying Payment..."
-              : "Creating Your Order..."}
+            {status === "verifying" ? "Verifying Payment..." : "Creating Your Order..."}
           </h1>
           <p className="text-muted text-sm">
             {status === "verifying"
-              ? "We're confirming your payment with QorePay."  // ✅ updated
+              ? "We're confirming your payment with QorePay."
               : "Payment confirmed! Setting up your order now."}
           </p>
         </div>
@@ -203,29 +201,18 @@ export default function CheckoutSuccessPage() {
     );
   }
 
-  // Error state
   if (status === "error") {
     return (
       <div className="page-transition pt-24 lg:pt-28">
         <div className="max-w-lg mx-auto px-6 py-20 text-center">
           <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg
-              width="28"
-              height="28"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#dc2626"
-              strokeWidth="2"
-            >
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
               <line x1="15" y1="9" x2="9" y2="15" />
               <line x1="9" y1="9" x2="15" y2="15" />
             </svg>
           </div>
-          <h1
-            className="text-2xl mb-3"
-            style={{ fontFamily: "'Playfair Display', serif" }}
-          >
+          <h1 className="text-2xl mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>
             Something Went Wrong
           </h1>
           <p className="text-muted text-sm mb-6 max-w-md mx-auto">{error}</p>
@@ -250,27 +237,16 @@ export default function CheckoutSuccessPage() {
     );
   }
 
-  // Success state
   return (
     <div className="page-transition pt-24 lg:pt-28">
       <div className="max-w-lg mx-auto px-6 py-20 text-center">
         <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-8 animate-scale-up">
-          <svg
-            width="36"
-            height="36"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#16a34a"
-            strokeWidth="2"
-          >
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2">
             <polyline points="20 6 9 17 4 12" />
           </svg>
         </div>
 
-        <h1
-          className="text-3xl mb-3"
-          style={{ fontFamily: "'Playfair Display', serif" }}
-        >
+        <h1 className="text-3xl mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>
           Order Confirmed 🤍
         </h1>
 
@@ -280,33 +256,22 @@ export default function CheckoutSuccessPage() {
 
         <div className="bg-cream p-6 mb-8 text-left">
           <div className="flex justify-between mb-3">
-            <span className="text-[10px] uppercase tracking-[3px] text-muted">
-              Order Number
-            </span>
-            <span className="font-semibold tracking-[1px]">
-              #{orderId.slice(-8).toUpperCase()}
-            </span>
+            <span className="text-[10px] uppercase tracking-[3px] text-muted">Order Number</span>
+            <span className="font-semibold tracking-[1px]">#{orderId.slice(-8).toUpperCase()}</span>
           </div>
           {orderTotal > 0 && (
             <div className="flex justify-between">
-              <span className="text-[10px] uppercase tracking-[3px] text-muted">
-                Total
-              </span>
-              <span className="font-semibold">
-                {formatPrice(orderTotal)}
-              </span>
+              <span className="text-[10px] uppercase tracking-[3px] text-muted">Total</span>
+              <span className="font-semibold">{formatPrice(orderTotal)}</span>
             </div>
           )}
         </div>
 
         {isNewAccount && (
           <div className="bg-blue-50 border border-blue-100 p-4 mb-8 text-left">
-            <p className="text-sm text-blue-800 font-medium mb-1">
-              ✨ Account Created!
-            </p>
+            <p className="text-sm text-blue-800 font-medium mb-1">✨ Account Created!</p>
             <p className="text-xs text-blue-600">
-              We&apos;ve sent your login details to your email. You can
-              track your order from your dashboard.
+              We&apos;ve sent your login details to your email. You can track your order from your dashboard.
             </p>
           </div>
         )}

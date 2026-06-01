@@ -5,6 +5,8 @@ import { AuthProvider } from "@/context/AuthContext";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import WhatsAppButton from "@/components/WhatsAppButton";
+import MetaPixel from "@/components/MetaPixel";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "Jey Scent — Fragrance with Intention",
@@ -49,6 +51,9 @@ export default function RootLayout({
       <body className="min-h-screen flex flex-col antialiased">
         <AuthProvider>
           <CartProvider>
+            <Suspense fallback={null}>
+              <MetaPixel />
+            </Suspense>
             <Header />
             <main className="flex-1">{children}</main>
             <Footer />

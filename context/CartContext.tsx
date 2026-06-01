@@ -1,5 +1,4 @@
 "use client";
-
 import {
   createContext,
   useContext,
@@ -17,7 +16,7 @@ interface CartContextType {
   updateQuantity: (productId: string, size: string, quantity: number) => void;
   clearCart: () => void;
   totalItems: number;
-  totalPrice: number; // = sum of getSalePrice(item.price) × qty — exact checkout amount
+  totalPrice: number;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -49,14 +48,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const existing = prev.find(
         (i) => i.productId === newItem.productId && i.size === newItem.size
       );
-      if (existing) {
-        return prev.map((i) =>
-          i.productId === newItem.productId && i.size === newItem.size
-            ? { ...i, quantity: i.quantity + newItem.quantity }
-            : i
-        );
+
+      const updated = existing
+        ? prev.map((i) =>
+            i.productId === newItem.productId && i.size === newItem.size
+              ? { ...i, quantity: i.quantity + newItem.quantity }
+              : i
+          )
+        : [...prev, newItem];
+
+      // ── Meta Pixel: AddToCart ──────────────────────────────────────────
+      if (typeof window !== "undefined" && window.fbq) {
+        window.fbq("track", "AddToCart", {
+          content_ids: [newItem.productId],
+          content_name: newItem.name,
+          content_type: "product",
+          value: getSalePrice(newItem.price) * newItem.quantity,
+          currency: "NGN",
+        });
       }
-      return [...prev, newItem];
+
+      return updated;
     });
   };
 
@@ -85,8 +97,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const clearCart = () => setItems([]);
 
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
-
-  // Sale price × qty — this is exactly what gets charged at checkout
   const totalPrice = items.reduce(
     (sum, i) => sum + getSalePrice(i.price) * i.quantity,
     0

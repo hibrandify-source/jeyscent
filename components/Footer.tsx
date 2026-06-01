@@ -133,7 +133,7 @@ export default function Footer() {
             </h5>
             <ul className="space-y-3">
               <li className="text-white/40 text-sm">jeyscentng@gmail.com</li>
-              <li className="text-white/40 text-sm">Lagos, Nigeria</li>
+              <li className="text-white/40 text-sm">Abijo GRA, Lagos, Nigeria</li>
               <li>
                 <a
                   href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER}`}
