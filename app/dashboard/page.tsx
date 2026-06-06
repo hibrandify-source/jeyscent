@@ -97,18 +97,24 @@ export default function DashboardPage() {
   const cancelSubscription = async (subId: string) => {
     if (!confirm("Are you sure you want to cancel this subscription?")) return;
     try {
-      await fetch("/api/subscriptions", {
+      const res = await fetch(`/api/subscriptions/${subId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscriptionId: subId, status: "cancelled" }),
+        body: JSON.stringify({ status: "cancelled" }),
       });
-      fetchData();
+      if (res.ok) {
+        fetchData();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to cancel subscription");
+      }
     } catch (err) {
       console.error(err);
+      alert("Something went wrong. Please try again.");
     }
   };
 
-    const handleChangePassword = async (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPwError("");
     setPwSuccess("");
@@ -220,17 +226,16 @@ export default function DashboardPage() {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`pb-4 text-[11px] uppercase tracking-[3px] transition-all whitespace-nowrap ${
-                activeTab === tab
+              className={`pb-4 text-[11px] uppercase tracking-[3px] transition-all whitespace-nowrap ${activeTab === tab
                   ? "text-black border-b-2 border-black"
                   : "text-muted hover:text-black"
-              }`}
+                }`}
             >
               {tab === "orders"
                 ? `Orders (${orders.length})`
                 : tab === "subscriptions"
-                ? `Subscriptions (${subscriptions.length})`
-                : "Settings"}
+                  ? `Subscriptions (${subscriptions.length})`
+                  : "Settings"}
             </button>
           ))}
         </div>
@@ -297,9 +302,8 @@ export default function DashboardPage() {
                               style={{ width: `${(getStatusSteps(order.status).filter((s) => s.completed).length - 1) * 25}%` }} />
                             {getStatusSteps(order.status).map((step) => (
                               <div key={step.name} className="relative z-10 flex flex-col items-center">
-                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                                  step.completed ? "bg-black border-black" : "bg-white border-gray-300"
-                                }`}>
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${step.completed ? "bg-black border-black" : "bg-white border-gray-300"
+                                  }`}>
                                   {step.completed && (
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
                                       <polyline points="20 6 9 17 4 12" />

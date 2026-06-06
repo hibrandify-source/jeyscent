@@ -333,7 +333,7 @@ export default function SubscribePage() {
                     </button>
 
                     <p className="text-center text-[10px] text-muted mt-4">
-                      Cancel anytime · Free shipping included
+                      Cancel anytime · Free shipping included on order up to ₦200,000
                     </p>
                   </>
                 )}

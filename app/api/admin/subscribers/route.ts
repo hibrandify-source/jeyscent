@@ -1,9 +1,7 @@
 // app/api/admin/subscribers/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
-
-const prisma = new PrismaClient();
 
 // FIXED: decoded.userId → decoded.id, 'ADMIN' → 'admin'
 async function isAdmin(request: NextRequest) {
