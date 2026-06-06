@@ -35,7 +35,9 @@ export async function POST(request: NextRequest) {
             customer_phone: metadata?.customer_phone || "",
             ...metadata,
           },
-          redirect_url: `${baseUrl}/checkout/success`,
+          redirect_url: metadata?.subscriptionData
+            ? `${baseUrl}/subscribe/success`
+            : `${baseUrl}/checkout/success`,
           failure_url: `${baseUrl}/checkout?payment=failed`,
         }),
       }

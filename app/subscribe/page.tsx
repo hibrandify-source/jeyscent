@@ -29,26 +29,34 @@ export default function SubscribePage() {
       router.push("/auth/login");
       return;
     }
-
     if (!currentProduct) return;
 
     setSubscribing(true);
     try {
-      const res = await fetch("/api/subscriptions", {
+      const res = await fetch("/api/payment/initialize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          productId: currentProduct.id,
-          productName: currentProduct.name,
-          size: currentProduct.sizes[selectedSize].size,
-          frequency: "quarterly",
-          price: discountedPrice,
+          amount: discountedPrice,
+          email: user.email,
+          name: user.name,
+          metadata: {
+            subscriptionData: {
+              productId: currentProduct.id,
+              productName: currentProduct.name,
+              size: currentProduct.sizes[selectedSize].size,
+              frequency: "quarterly",
+              price: discountedPrice,
+            },
+          },
         }),
       });
 
-      if (res.ok) {
-        setSuccess(true);
-        setTimeout(() => router.push("/dashboard"), 2000);
+      const data = await res.json();
+      if (data.authorization_url) {
+        window.location.href = data.authorization_url; // redirect to QorePay
+      } else {
+        console.error("No checkout URL returned:", data);
       }
     } catch (err) {
       console.error(err);
