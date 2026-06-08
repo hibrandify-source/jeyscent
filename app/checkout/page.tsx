@@ -97,18 +97,43 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (isSubscription) {
       const raw = localStorage.getItem("jeyscent_subscription");
+      const activeSession = sessionStorage.getItem("jeyscent_sub_session");
+
       if (!raw) {
         router.push("/subscribe");
         return;
       }
+
       try {
-        setSubscriptionData(JSON.parse(raw));
+        const parsed = JSON.parse(raw);
+
+        // ── Validate: session ID must match ──────────────────────────────────
+        // This prevents stale subscription data from a previous visit
+        // being used in a new checkout session
+        if (!activeSession || parsed.sessionId !== activeSession) {
+          console.warn("Stale subscription data detected — clearing.");
+          localStorage.removeItem("jeyscent_subscription");
+          router.push("/subscribe");
+          return;
+        }
+
+        // ── Validate: not older than 2 hours ─────────────────────────────────
+        if (parsed.savedAt && Date.now() - parsed.savedAt > 7_200_000) {
+          localStorage.removeItem("jeyscent_subscription");
+          sessionStorage.removeItem("jeyscent_sub_session");
+          router.push("/subscribe");
+          return;
+        }
+
+        setSubscriptionData(parsed);
       } catch {
+        localStorage.removeItem("jeyscent_subscription");
         router.push("/subscribe");
       }
     } else {
-      // ✅ Regular checkout — always wipe stale subscription data immediately
+      // ── Regular checkout — always wipe stale subscription data ────────────
       localStorage.removeItem("jeyscent_subscription");
+      sessionStorage.removeItem("jeyscent_sub_session");
     }
   }, [isSubscription, router]);
 

@@ -125,6 +125,7 @@ export default function CheckoutSuccessPage() {
           console.error("Subscription confirm error:", subErr);
         }
         localStorage.removeItem("jeyscent_subscription");
+        sessionStorage.removeItem("jeyscent_sub_session");
         localStorage.removeItem("jeyscent_checkout");
         setStatus("success");
         return;

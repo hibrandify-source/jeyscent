@@ -54,6 +54,9 @@ export default function SubscribePage() {
 
   // ── Clear stale subscription data on mount ────────────────────────────────
   useEffect(() => {
+    // Always clear when user lands on subscribe page
+    // sessionStorage is cleared automatically when tab/browser closes
+    sessionStorage.removeItem("jeyscent_sub_session");
     localStorage.removeItem("jeyscent_subscription");
   }, []);
 
@@ -158,9 +161,13 @@ export default function SubscribePage() {
     }
     if (basket.length === 0) return;
 
+    // ── Generate a unique session ID for this subscription attempt ──────────
+    const sessionId = `sub_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
     localStorage.setItem(
       "jeyscent_subscription",
       JSON.stringify({
+        sessionId,                 // ← unique per "Start Subscription" click
         items: basket,
         frequency: FREQUENCY_VALUE,
         frequencyLabel: FREQUENCY_LABEL,
@@ -170,6 +177,10 @@ export default function SubscribePage() {
         savedAt: Date.now(),
       })
     );
+
+    // ── Write the active session ID separately ───────────────────────────────
+    // Checkout page checks this matches before trusting the subscription data
+    sessionStorage.setItem("jeyscent_sub_session", sessionId);
 
     router.push("/checkout?type=subscription");
   };
@@ -285,17 +296,15 @@ export default function SubscribePage() {
                     <button
                       key={type}
                       onClick={() => handleTypeChange(type)}
-                      className={`border px-4 py-4 text-left transition-all duration-200 ${
-                        activeType === type
-                          ? "border-black bg-black text-white"
-                          : "border-gray-200 hover:border-gray-400"
-                      }`}
+                      className={`border px-4 py-4 text-left transition-all duration-200 ${activeType === type
+                        ? "border-black bg-black text-white"
+                        : "border-gray-200 hover:border-gray-400"
+                        }`}
                     >
                       <p className="text-sm font-semibold mb-1">{type}</p>
                       <p
-                        className={`text-[10px] leading-relaxed ${
-                          activeType === type ? "text-white/60" : "text-muted"
-                        }`}
+                        className={`text-[10px] leading-relaxed ${activeType === type ? "text-white/60" : "text-muted"
+                          }`}
                       >
                         {type === "Reed Diffuser"
                           ? "Full set with reeds & bottle."
@@ -319,11 +328,10 @@ export default function SubscribePage() {
                         setPreviewProductId(p.id);
                         setPreviewSizeIndex(0);
                       }}
-                      className={`relative border p-4 text-left transition-all ${
-                        previewProductId === p.id
-                          ? "border-black bg-cream"
-                          : "border-gray-200 hover:border-gray-400"
-                      }`}
+                      className={`relative border p-4 text-left transition-all ${previewProductId === p.id
+                        ? "border-black bg-cream"
+                        : "border-gray-200 hover:border-gray-400"
+                        }`}
                     >
                       <div className="relative aspect-square mb-3 overflow-hidden bg-light-gray">
                         <Image
@@ -371,11 +379,10 @@ export default function SubscribePage() {
                       <button
                         key={size.size}
                         onClick={() => setPreviewSizeIndex(i)}
-                        className={`flex-1 min-w-[100px] px-4 py-4 border text-center transition-all ${
-                          previewSizeIndex === i
-                            ? "bg-black text-white border-black"
-                            : "border-gray-200 hover:border-black"
-                        }`}
+                        className={`flex-1 min-w-[100px] px-4 py-4 border text-center transition-all ${previewSizeIndex === i
+                          ? "bg-black text-white border-black"
+                          : "border-gray-200 hover:border-black"
+                          }`}
                       >
                         <span className="block font-medium text-sm">
                           {size.size}
@@ -476,11 +483,11 @@ export default function SubscribePage() {
                       item.id ===
                       lineItemId(previewProduct.id, previewSize.size)
                   ) && (
-                    <p className="text-[10px] text-green-700 text-center mt-2">
-                      ✓ Already in your subscription — adding more will
-                      increase the quantity.
-                    </p>
-                  )}
+                      <p className="text-[10px] text-green-700 text-center mt-2">
+                        ✓ Already in your subscription — adding more will
+                        increase the quantity.
+                      </p>
+                    )}
                 </div>
               )}
             </div>
@@ -651,11 +658,11 @@ export default function SubscribePage() {
                     {basket.some(
                       (item) => item.productType === "Refill Bottle"
                     ) && (
-                      <div className="mb-5 p-3 bg-amber-50 border border-amber-100 text-amber-800 text-xs leading-relaxed">
-                        💡 <strong>Refill tip:</strong> Compatible with all
-                        JeyScent vessels. Just pour and reuse.
-                      </div>
-                    )}
+                        <div className="mb-5 p-3 bg-amber-50 border border-amber-100 text-amber-800 text-xs leading-relaxed">
+                          💡 <strong>Refill tip:</strong> Compatible with all
+                          JeyScent vessels. Just pour and reuse.
+                        </div>
+                      )}
 
                     <button
                       onClick={handleSubscribe}
