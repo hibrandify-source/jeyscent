@@ -70,7 +70,13 @@ export default function CheckoutPage() {
   const { user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const isSubscription = searchParams.get("type") === "subscription";
+  const isSubscription = useMemo(() => {
+    if (typeof window !== "undefined") {
+      // In production, trust the actual browser URL over searchParams
+      return new URLSearchParams(window.location.search).get("type") === "subscription";
+    }
+    return searchParams.get("type") === "subscription";
+  }, [searchParams]);
 
   // ── Subscription data ─────────────────────────────────────────────────────
   const [subscriptionData, setSubscriptionData] =
@@ -100,41 +106,54 @@ export default function CheckoutPage() {
       const activeSession = sessionStorage.getItem("jeyscent_sub_session");
 
       if (!raw) {
+        // ✅ Was redirecting to /subscribe — but if URL has no ?type=subscription
+        // this should never fire. Add a hard URL check as safety net.
+        if (typeof window !== "undefined" &&
+          !window.location.search.includes("type=subscription")) {
+          // URL says regular checkout — ignore subscription logic entirely
+          localStorage.removeItem("jeyscent_subscription");
+          setIsChecking(false);
+          return;
+        }
         router.push("/subscribe");
         return;
       }
 
       try {
         const parsed = JSON.parse(raw);
+        const activeSession = sessionStorage.getItem("jeyscent_sub_session");
 
-        // ── Validate: session ID must match ──────────────────────────────────
-        // This prevents stale subscription data from a previous visit
-        // being used in a new checkout session
         if (!activeSession || parsed.sessionId !== activeSession) {
-          console.warn("Stale subscription data detected — clearing.");
           localStorage.removeItem("jeyscent_subscription");
-          router.push("/subscribe");
+          // ✅ Safety check — only redirect to /subscribe if URL actually says subscription
+          if (window.location.search.includes("type=subscription")) {
+            router.push("/subscribe");
+          }
           return;
         }
 
-        // ── Validate: not older than 2 hours ─────────────────────────────────
         if (parsed.savedAt && Date.now() - parsed.savedAt > 7_200_000) {
           localStorage.removeItem("jeyscent_subscription");
           sessionStorage.removeItem("jeyscent_sub_session");
-          router.push("/subscribe");
+          if (window.location.search.includes("type=subscription")) {
+            router.push("/subscribe");
+          }
           return;
         }
 
         setSubscriptionData(parsed);
       } catch {
         localStorage.removeItem("jeyscent_subscription");
-        router.push("/subscribe");
+        if (window.location.search.includes("type=subscription")) {
+          router.push("/subscribe");
+        }
       }
     } else {
-      // ── Regular checkout — always wipe stale subscription data ────────────
+      // Regular checkout — wipe any stale subscription data
       localStorage.removeItem("jeyscent_subscription");
       sessionStorage.removeItem("jeyscent_sub_session");
     }
+    setIsChecking(false);
   }, [isSubscription, router]);
 
   // ── Pre-fill from logged-in user ──────────────────────────────────────────
