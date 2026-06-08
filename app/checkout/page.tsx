@@ -251,6 +251,11 @@ export default function CheckoutPage() {
     if (!validateForm()) return;
     setProcessing(true);
 
+    // ✅ Clear any stale subscription data if this is a regular order
+    if (!isSubscription) {
+      localStorage.removeItem("jeyscent_subscription");
+    }
+
     try {
       const checkoutData = {
         form,
@@ -429,11 +434,10 @@ export default function CheckoutPage() {
                 <button
                   type="button"
                   onClick={() => setDeliveryMethod("delivery")}
-                  className={`relative border p-5 text-left transition-all duration-200 ${
-                    deliveryMethod === "delivery"
+                  className={`relative border p-5 text-left transition-all duration-200 ${deliveryMethod === "delivery"
                       ? "border-black bg-black text-white"
                       : "border-gray-200 hover:border-gray-400 bg-white"
-                  }`}
+                    }`}
                 >
                   {deliveryMethod === "delivery" && (
                     <div className="absolute top-3 right-3 w-5 h-5 bg-white rounded-full flex items-center justify-center">
@@ -465,11 +469,10 @@ export default function CheckoutPage() {
                   </svg>
                   <p className="text-sm font-semibold mb-1">We Deliver</p>
                   <p
-                    className={`text-xs leading-relaxed ${
-                      deliveryMethod === "delivery"
+                    className={`text-xs leading-relaxed ${deliveryMethod === "delivery"
                         ? "text-white/60"
                         : "text-muted"
-                    }`}
+                      }`}
                   >
                     We bring it to your door. Fee calculated by area.
                   </p>
@@ -479,11 +482,10 @@ export default function CheckoutPage() {
                 <button
                   type="button"
                   onClick={() => setDeliveryMethod("pickup")}
-                  className={`relative border p-5 text-left transition-all duration-200 ${
-                    deliveryMethod === "pickup"
+                  className={`relative border p-5 text-left transition-all duration-200 ${deliveryMethod === "pickup"
                       ? "border-black bg-black text-white"
                       : "border-gray-200 hover:border-gray-400 bg-white"
-                  }`}
+                    }`}
                 >
                   {deliveryMethod === "pickup" && (
                     <div className="absolute top-3 right-3 w-5 h-5 bg-white rounded-full flex items-center justify-center">
@@ -515,11 +517,10 @@ export default function CheckoutPage() {
                     My Rider / Pickup
                   </p>
                   <p
-                    className={`text-xs leading-relaxed ${
-                      deliveryMethod === "pickup"
+                    className={`text-xs leading-relaxed ${deliveryMethod === "pickup"
                         ? "text-white/60"
                         : "text-muted"
-                    }`}
+                      }`}
                   >
                     Send your rider or pick up yourself. No delivery fee.
                   </p>
@@ -618,11 +619,10 @@ export default function CheckoutPage() {
                       className="sr-only"
                     />
                     <div
-                      className={`w-5 h-5 border transition-colors duration-200 flex items-center justify-center ${
-                        createAccount
+                      className={`w-5 h-5 border transition-colors duration-200 flex items-center justify-center ${createAccount
                           ? "bg-black border-black"
                           : "bg-white border-gray-300 group-hover:border-gray-400"
-                      }`}
+                        }`}
                     >
                       {createAccount && (
                         <svg
