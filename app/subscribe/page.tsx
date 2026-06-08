@@ -679,14 +679,10 @@ export default function SubscribePage() {
 
                     <button
                       onClick={handleSubscribe}
-                      disabled={subscribing}
+                      disabled={false}
                       className="btn-luxury w-full bg-black text-white py-4 text-[11px] uppercase tracking-[4px] hover:bg-charcoal transition-all disabled:opacity-50"
                     >
-                      {subscribing
-                        ? "Setting Up..."
-                        : user
-                          ? "Start Subscription"
-                          : "Sign In to Subscribe"}
+                      {user ? "Start Subscription" : "Sign In to Subscribe"}
                     </button>
 
                     <p className="text-center text-[10px] text-muted mt-4">
