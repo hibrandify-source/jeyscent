@@ -182,7 +182,7 @@ export default function SubscribePage() {
     // Checkout page checks this matches before trusting the subscription data
     sessionStorage.setItem("jeyscent_sub_session", sessionId);
 
-    router.push("/checkout?type=subscription");
+    router.push("/checkout/subscription");
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
