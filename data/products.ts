@@ -32,6 +32,7 @@ export const getOriginalDisplayPrice = (storePrice: number) =>
 
 /** Formatted price string */
 export function formatPrice(amount: number): string {
+  if (amount === undefined || amount === null || isNaN(amount)) return "₦0";
   return `₦${amount.toLocaleString()}`;
 }
 

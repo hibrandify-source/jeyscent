@@ -96,7 +96,7 @@ export default function AdminSubscriptionsPage() {
       <div>
         <h1 className="text-3xl font-bold text-[#1a1a2e]">Product Subscriptions</h1>
         <p className="text-gray-500 mt-1">
-          Manage quarterly reed diffuser subscriptions
+          Manage bi-monthly reed diffuser subscriptions
         </p>
       </div>
 
@@ -106,7 +106,7 @@ export default function AdminSubscriptionsPage() {
           { label: "Total",      value: stats.total,                          color: "text-[#1a1a2e]" },
           { label: "Active",     value: stats.active,                         color: "text-green-600" },
           { label: "Cancelled",  value: stats.cancelled,                      color: "text-red-500"   },
-          { label: "Quarterly Revenue", value: formatPrice(stats.monthlyRecurring), color: "text-[#d4af37]" },
+          { label: "Bi-Monthly Revenue", value: formatPrice(stats.monthlyRecurring), color: "text-[#d4af37]" },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-xl shadow-sm border p-6">
             <p className="text-sm text-gray-500">{s.label}</p>
@@ -164,7 +164,7 @@ export default function AdminSubscriptionsPage() {
                     <td className="px-6 py-4 text-sm text-gray-600">{sub.size}</td>
                     <td className="px-6 py-4 text-sm font-semibold text-[#1a1a2e]">
                       {formatPrice(sub.price)}
-                      <span className="text-xs font-normal text-gray-400 ml-1">/ quarter</span>
+                      <span className="text-xs font-normal text-gray-400 ml-1">/ bi-monthly</span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
                       {new Date(sub.nextDelivery).toLocaleDateString("en-NG", {

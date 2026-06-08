@@ -1,88 +1,50 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 
-export default function SubscribeSuccessPage() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
+function SubscribeSuccessContent() {
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
 
   useEffect(() => {
-    const reference = searchParams.get("reference") || searchParams.get("ref");
-    if (!reference) {
-      setStatus("error");
-      return;
-    }
-    verifyAndCreate(reference);
+    verifyAndCreate();
   }, []);
 
-  const verifyAndCreate = async (reference: string) => {
+  const verifyAndCreate = async () => {
     try {
-      // 1. Verify payment
-      const verifyRes = await fetch("/api/payment/verify", {
+      const res = await fetch("/api/subscriptions/confirm", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reference }),
       });
-      const verifyData = await verifyRes.json();
+      const data = await res.json();
+      console.log("Confirm response:", data);
 
-      if (!verifyData.verified) {
-        setStatus("error");
-        return;
-      }
-
-      // 2. Extract subscription data from metadata
-      const meta = verifyData.metadata?.subscriptionData;
-      if (!meta) {
-        setStatus("error");
-        return;
-      }
-
-      // 3. Create subscription
-      const subRes = await fetch("/api/subscriptions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productId:   meta.productId,
-          productName: meta.productName,
-          size:        meta.size,
-          frequency:   meta.frequency || "quarterly",
-          price:       meta.price,
-        }),
-      });
-
-      if (subRes.ok) {
+      if (res.ok) {
         setStatus("success");
       } else {
         setStatus("error");
       }
-    } catch {
+    } catch (err) {
+      console.error(err);
       setStatus("error");
     }
   };
 
-  if (status === "loading") {
-    return (
-      <div className="pt-40 text-center">
-        <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-sm text-muted">Confirming your subscription...</p>
-      </div>
-    );
-  }
+  if (status === "loading") return (
+    <div className="pt-40 text-center">
+      <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+      <p className="text-sm text-muted">Confirming your subscription...</p>
+    </div>
+  );
 
-  if (status === "error") {
-    return (
-      <div className="pt-40 text-center">
-        <h2 className="text-2xl font-serif mb-4">Something went wrong</h2>
-        <p className="text-muted text-sm mb-6">We couldn't confirm your subscription. Please contact support.</p>
-        <Link href="/dashboard" className="bg-black text-white px-8 py-3 text-[11px] uppercase tracking-[3px]">
-          Go to Dashboard
-        </Link>
-      </div>
-    );
-  }
+  if (status === "error") return (
+    <div className="pt-40 text-center">
+      <h2 className="text-2xl font-serif mb-4">Something went wrong</h2>
+      <p className="text-muted text-sm mb-6">Please contact support.</p>
+      <Link href="/dashboard" className="bg-black text-white px-8 py-3 text-[11px] uppercase tracking-[3px]">
+        Go to Dashboard
+      </Link>
+    </div>
+  );
 
   return (
     <div className="pt-40 text-center">
@@ -97,5 +59,13 @@ export default function SubscribeSuccessPage() {
         View Dashboard
       </Link>
     </div>
+  );
+}
+
+export default function SubscribeSuccessPage() {
+  return (
+    <Suspense>
+      <SubscribeSuccessContent />
+    </Suspense>
   );
 }

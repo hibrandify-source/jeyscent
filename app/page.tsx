@@ -343,13 +343,13 @@ export default function HomePage() {
           </h2>
           <div className="luxury-divider mx-auto mt-4 mb-8" />
           <p className="text-muted leading-relaxed max-w-xl mx-auto mb-10">
-            Set it and forget it. Our quarterly subscription delivers a fresh
-            reed diffuser to your door every 3 months — so your space always
+            Set it and forget it. Our bi-monthly subscription delivers a fresh
+            reed diffuser and refill bottle to your door every 2 months — so your space always
             smells like intention.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-8 mb-10">
             {[
-              { label: "Auto-Delivery", desc: "Every 3 months" },
+              { label: "Auto-Delivery", desc: "Every 2 months" },
               { label: "Save 10%", desc: "On every delivery" },
               { label: "Cancel Anytime", desc: "No commitments" },
             ].map((item) => (

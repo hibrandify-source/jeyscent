@@ -342,7 +342,7 @@ export default function DashboardPage() {
           subscriptions.length === 0 ? (
             <div className="py-20 text-center">
               <h3 className="text-xl mb-3 font-serif">No Subscriptions Yet</h3>
-              <p className="text-muted text-sm mb-6">Subscribe for automatic quarterly deliveries.</p>
+              <p className="text-muted text-sm mb-6">Subscribe for automatic bi-monthly deliveries.</p>
               <Link href="/subscribe" className="inline-block bg-black text-white px-8 py-3 text-[11px] uppercase tracking-[3px]">
                 Start a Subscription
               </Link>
@@ -371,7 +371,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] uppercase tracking-[2px] text-muted">Price</p>
-                      <p className="text-sm font-medium">{formatPrice(sub.price)}/quarter</p>
+                      <p className="text-sm font-medium">{formatPrice(sub.price)}/bi-monthly</p>
                     </div>
                   </div>
                   {sub.status === "active" && (

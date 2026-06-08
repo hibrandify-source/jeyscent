@@ -4,21 +4,81 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
-import { formatPrice, getSalePrice } from "@/data/products";
+import {
+  formatPrice,
+  getSalePrice,
+  getOriginalDisplayPrice,
+} from "@/data/products";
 import { getShippingFee, shippingZones } from "@/lib/shipping";
 import ShippingCalculator from "@/components/ShippingCalculator";
 import Image from "next/image";
 
 type DeliveryMethod = "delivery" | "pickup";
 
+interface SubscriptionData {
+  // ── Multi-item basket shape ──
+  items?: {
+    id: string;
+    productId: string;
+    productName: string;
+    productType: string;
+    fragrance: string;
+    size: string;
+    quantity: number;
+    unitPrice: number;
+    originalUnitPrice: number;
+    image: string;
+  }[];
+  totalPrice?: number;
+  totalUnits?: number;
+  frequency?: string;
+  frequencyLabel?: string;
+  frequencyMonths?: number;
+  savedAt?: number;
+
+  // ── Legacy single-item shape (fallback) ──
+  productId?: string;
+  productName?: string;
+  productType?: string;
+  fragrance?: string;
+  size?: string;
+  quantity?: number;
+  price?: number;
+  unitPrice?: number;
+  image?: string;
+}
+
+interface CheckoutItem {
+  productId: string;
+  name: string;
+  size: string;
+  quantity: number;
+  price: number;
+  image: string;
+}
+
+const nigerianStates = [
+  "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa",
+  "Benue", "Borno", "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti",
+  "Enugu", "FCT", "Gombe", "Imo", "Jigawa", "Kaduna", "Kano", "Katsina",
+  "Kebbi", "Kogi", "Kwara", "Lagos", "Nasarawa", "Niger", "Ogun", "Ondo",
+  "Osun", "Oyo", "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara",
+];
+
 export default function CheckoutPage() {
-  const { items, totalPrice, clearCart } = useCart();
+  const { items, totalPrice: cartTotal } = useCart();
   const { user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isSubscription = searchParams.get("type") === "subscription";
 
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("delivery");
+  // ── Subscription data ─────────────────────────────────────────────────────
+  const [subscriptionData, setSubscriptionData] =
+    useState<SubscriptionData | null>(null);
 
+  // ── Form & UI state ───────────────────────────────────────────────────────
+  const [deliveryMethod, setDeliveryMethod] =
+    useState<DeliveryMethod>("delivery");
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -33,12 +93,23 @@ export default function CheckoutPage() {
   const [createAccount, setCreateAccount] = useState(true);
   const [isChecking, setIsChecking] = useState(true);
 
+  // ── Load subscription data on mount ──────────────────────────────────────
   useEffect(() => {
-    if (searchParams.get("payment") === "failed") {
-      setError("Payment was not completed. Please try again or contact support.");
+    if (isSubscription) {
+      const raw = localStorage.getItem("jeyscent_subscription");
+      if (!raw) {
+        router.push("/subscribe");
+        return;
+      }
+      try {
+        setSubscriptionData(JSON.parse(raw));
+      } catch {
+        router.push("/subscribe");
+      }
     }
-  }, [searchParams]);
+  }, [isSubscription, router]);
 
+  // ── Pre-fill from logged-in user ──────────────────────────────────────────
   useEffect(() => {
     if (user) {
       setForm((prev) => ({
@@ -49,36 +120,102 @@ export default function CheckoutPage() {
     }
   }, [user]);
 
+  // ── Failed payment banner ─────────────────────────────────────────────────
   useEffect(() => {
-    if (items.length === 0 && !processing) {
-      const saved = localStorage.getItem("jeyscent_checkout");
-      if (!saved) router.push("/cart");
+    if (searchParams.get("payment") === "failed") {
+      setError(
+        "Payment was not completed. Please try again or contact support."
+      );
+    }
+  }, [searchParams]);
+
+  // ── Redirect to cart if no items (regular checkout only) ──────────────────
+  useEffect(() => {
+    if (!isSubscription) {
+      if (items.length === 0 && !processing) {
+        const saved = localStorage.getItem("jeyscent_checkout");
+        if (!saved) router.push("/cart");
+      }
     }
     setIsChecking(false);
-  }, [items, router, processing]);
+  }, [isSubscription, items, router, processing]);
 
+  // ── Checkout items ────────────────────────────────────────────────────────
+  const checkoutItems: CheckoutItem[] = useMemo(() => {
+    if (isSubscription && subscriptionData) {
+      if (Array.isArray(subscriptionData.items)) {
+        return subscriptionData.items.map((item) => ({
+          productId: item.productId,
+          name: item.productName,
+          size: item.size,
+          quantity: item.quantity ?? 1,
+          price: item.unitPrice ?? 0,
+          image: item.image || "",
+        }));
+      }
+      // Legacy single-item fallback
+      return [
+        {
+          productId: subscriptionData.productId || "",
+          name: subscriptionData.productName || "",
+          size: subscriptionData.size || "",
+          quantity: subscriptionData.quantity ?? 1,
+          price:
+            subscriptionData.unitPrice ?? subscriptionData.price ?? 0,
+          image: subscriptionData.image || "",
+        },
+      ];
+    }
+    return items.map((item) => ({
+      productId: item.productId,
+      name: item.name,
+      size: item.size,
+      quantity: item.quantity,
+      price: item.price,
+      image: item.image,
+    }));
+  }, [isSubscription, subscriptionData, items]);
+
+  // ── Total price ───────────────────────────────────────────────────────────
+  const totalPrice = useMemo(() => {
+    if (isSubscription && subscriptionData) {
+      if (Array.isArray(subscriptionData.items)) {
+        return subscriptionData.items.reduce(
+          (sum, item) =>
+            sum + (item.unitPrice ?? 0) * (item.quantity ?? 1),
+          0
+        );
+      }
+      return (
+        subscriptionData.totalPrice ?? subscriptionData.price ?? 0
+      );
+    }
+    return cartTotal ?? 0;
+  }, [isSubscription, subscriptionData, cartTotal]);
+
+  // ── Shipping ──────────────────────────────────────────────────────────────
+  // ⚠️ Must come AFTER totalPrice so it can reference it safely
   const shipping = useMemo(() => {
     if (deliveryMethod === "pickup") {
       return { fee: 0, freeShipping: false, isParkPickup: false, zone: null };
     }
+    if (isSubscription) {
+      // Subscription shipping is calculated at checkout based on area
+      return getShippingFee(form.area, totalPrice);
+    }
     return getShippingFee(form.area, totalPrice);
-  }, [form.area, totalPrice, deliveryMethod]);
+  }, [form.area, totalPrice, deliveryMethod, isSubscription]);
 
-  const grandTotal = totalPrice + shipping.fee;
+  // ── Grand total ───────────────────────────────────────────────────────────
+  // ⚠️ Single declaration — only after both totalPrice and shipping exist
+  const grandTotal = (totalPrice ?? 0) + (shipping?.fee ?? 0);
 
-  if (isChecking) {
-    return (
-      <div className="pt-32 pb-20 text-center">
-        <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin mx-auto" />
-      </div>
-    );
-  }
-
+  // ── Handlers ─────────────────────────────────────────────────────────────
   const handleUpdate = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const validateForm = () => {
+  const validateForm = (): boolean => {
     if (!form.name || !form.email || !form.phone) {
       setError("Please fill in your name, email and phone number");
       return false;
@@ -91,11 +228,19 @@ export default function CheckoutPage() {
       setError("Please enter a valid phone number");
       return false;
     }
-    // Only require address fields if delivery selected
     if (deliveryMethod === "delivery") {
-      if (!form.address || !form.area || !form.city || !form.state) {
-        setError("Please fill in all delivery address fields including your area");
-        return false;
+      if (!isSubscription) {
+        if (!form.address || !form.area || !form.city || !form.state) {
+          setError(
+            "Please fill in all delivery address fields including your area"
+          );
+          return false;
+        }
+      } else {
+        if (!form.address || !form.city || !form.state) {
+          setError("Please fill in your delivery address");
+          return false;
+        }
       }
     }
     return true;
@@ -104,26 +249,14 @@ export default function CheckoutPage() {
   const handleProceedToPayment = async () => {
     setError("");
     if (!validateForm()) return;
-
     setProcessing(true);
 
     try {
-      const shippingAddress =
-        deliveryMethod === "pickup"
-          ? "Self Pickup / Customer Rider"
-          : `${form.address}, ${form.area}`;
-
       const checkoutData = {
         form,
         deliveryMethod,
-        items: items.map((item) => ({
-          productId: item.productId,
-          name: item.name,
-          size: item.size,
-          quantity: item.quantity,
-          price: item.price,
-          image: item.image,
-        })),
+        isSubscription,
+        items: checkoutItems,
         totalPrice,
         grandTotal,
         shippingFee: shipping.fee,
@@ -136,7 +269,10 @@ export default function CheckoutPage() {
         savedAt: Date.now(),
       };
 
-      localStorage.setItem("jeyscent_checkout", JSON.stringify(checkoutData));
+      localStorage.setItem(
+        "jeyscent_checkout",
+        JSON.stringify(checkoutData)
+      );
 
       const res = await fetch("/api/payment/initialize", {
         method: "POST",
@@ -145,7 +281,10 @@ export default function CheckoutPage() {
           amount: grandTotal,
           email: form.email,
           name: form.name,
-          metadata: { customer_phone: form.phone },
+          metadata: {
+            customer_phone: form.phone,
+            ...(isSubscription && subscriptionData && { subscriptionData }),
+          },
         }),
       });
 
@@ -153,10 +292,15 @@ export default function CheckoutPage() {
 
       if (res.ok && data.authorization_url) {
         const updated = { ...checkoutData, paymentRef: data.reference };
-        localStorage.setItem("jeyscent_checkout", JSON.stringify(updated));
+        localStorage.setItem(
+          "jeyscent_checkout",
+          JSON.stringify(updated)
+        );
         window.location.href = data.authorization_url;
       } else {
-        setError(data.error || "Failed to initialize payment. Please try again.");
+        setError(
+          data.error || "Failed to initialize payment. Please try again."
+        );
         setProcessing(false);
       }
     } catch {
@@ -165,20 +309,25 @@ export default function CheckoutPage() {
     }
   };
 
-  const nigerianStates = [
-    "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue",
-    "Borno", "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu", "FCT",
-    "Gombe", "Imo", "Jigawa", "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi",
-    "Kwara", "Lagos", "Nasarawa", "Niger", "Ogun", "Ondo", "Osun", "Oyo",
-    "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara",
-  ];
+  // ── Loading guard ─────────────────────────────────────────────────────────
+  if (isChecking || (isSubscription && !subscriptionData)) {
+    return (
+      <div className="pt-32 pb-20 text-center">
+        <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin mx-auto" />
+      </div>
+    );
+  }
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="page-transition pt-24 lg:pt-28">
       {/* Header */}
       <div className="bg-black text-white py-10 lg:py-14 text-center">
-        <h1 className="text-3xl lg:text-4xl tracking-wide font-serif">
-          Checkout
+        <h1
+          className="text-3xl lg:text-4xl tracking-wide"
+          style={{ fontFamily: "'Playfair Display', serif" }}
+        >
+          {isSubscription ? "Subscribe & Save" : "Checkout"}
         </h1>
         {!user && (
           <p className="text-white/40 text-sm mt-2">
@@ -210,12 +359,15 @@ export default function CheckoutPage() {
         )}
 
         <div className="grid lg:grid-cols-5 gap-12 lg:gap-16">
-          {/* ── Form ── */}
+          {/* ── Left: Form ── */}
           <div className="lg:col-span-3">
 
             {/* Personal Info */}
             <div className="mb-10">
-              <h3 className="text-lg tracking-wide mb-6 font-serif">
+              <h3
+                className="text-lg tracking-wide mb-6"
+                style={{ fontFamily: "'Playfair Display', serif" }}
+              >
                 Your Information
               </h3>
               <div className="space-y-4">
@@ -239,7 +391,9 @@ export default function CheckoutPage() {
                     <input
                       type="email"
                       value={form.email}
-                      onChange={(e) => handleUpdate("email", e.target.value)}
+                      onChange={(e) =>
+                        handleUpdate("email", e.target.value)
+                      }
                       className="w-full border border-gray-200 px-4 py-3.5 text-sm focus:outline-none focus:border-black transition-colors"
                       placeholder="you@example.com"
                     />
@@ -251,7 +405,9 @@ export default function CheckoutPage() {
                     <input
                       type="tel"
                       value={form.phone}
-                      onChange={(e) => handleUpdate("phone", e.target.value)}
+                      onChange={(e) =>
+                        handleUpdate("phone", e.target.value)
+                      }
                       className="w-full border border-gray-200 px-4 py-3.5 text-sm focus:outline-none focus:border-black transition-colors"
                       placeholder="08012345678"
                     />
@@ -260,30 +416,39 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            {/* ── Delivery Method Selector ── */}
+            {/* Delivery Method */}
             <div className="mb-10">
-              <h3 className="text-lg tracking-wide mb-6 font-serif">
+              <h3
+                className="text-lg tracking-wide mb-6"
+                style={{ fontFamily: "'Playfair Display', serif" }}
+              >
                 Delivery Method
               </h3>
               <div className="grid grid-cols-2 gap-4">
-                {/* Option 1 — We Deliver */}
+                {/* We Deliver */}
                 <button
                   type="button"
                   onClick={() => setDeliveryMethod("delivery")}
-                  className={`relative border p-5 text-left transition-all duration-200 ${deliveryMethod === "delivery"
+                  className={`relative border p-5 text-left transition-all duration-200 ${
+                    deliveryMethod === "delivery"
                       ? "border-black bg-black text-white"
                       : "border-gray-200 hover:border-gray-400 bg-white"
-                    }`}
+                  }`}
                 >
-                  {/* Check mark */}
                   {deliveryMethod === "delivery" && (
                     <div className="absolute top-3 right-3 w-5 h-5 bg-white rounded-full flex items-center justify-center">
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3">
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="black"
+                        strokeWidth="3"
+                      >
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     </div>
                   )}
-                  {/* Truck icon */}
                   <svg
                     width="22"
                     height="22"
@@ -299,29 +464,41 @@ export default function CheckoutPage() {
                     <circle cx="18.5" cy="18.5" r="2.5" />
                   </svg>
                   <p className="text-sm font-semibold mb-1">We Deliver</p>
-                  <p className={`text-xs leading-relaxed ${deliveryMethod === "delivery" ? "text-white/60" : "text-muted"}`}>
+                  <p
+                    className={`text-xs leading-relaxed ${
+                      deliveryMethod === "delivery"
+                        ? "text-white/60"
+                        : "text-muted"
+                    }`}
+                  >
                     We bring it to your door. Fee calculated by area.
                   </p>
                 </button>
 
-                {/* Option 2 — Self Pickup */}
+                {/* Self Pickup */}
                 <button
                   type="button"
                   onClick={() => setDeliveryMethod("pickup")}
-                  className={`relative border p-5 text-left transition-all duration-200 ${deliveryMethod === "pickup"
+                  className={`relative border p-5 text-left transition-all duration-200 ${
+                    deliveryMethod === "pickup"
                       ? "border-black bg-black text-white"
                       : "border-gray-200 hover:border-gray-400 bg-white"
-                    }`}
+                  }`}
                 >
-                  {/* Check mark */}
                   {deliveryMethod === "pickup" && (
                     <div className="absolute top-3 right-3 w-5 h-5 bg-white rounded-full flex items-center justify-center">
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3">
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="black"
+                        strokeWidth="3"
+                      >
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     </div>
                   )}
-                  {/* Person icon */}
                   <svg
                     width="22"
                     height="22"
@@ -334,25 +511,37 @@ export default function CheckoutPage() {
                     <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
                     <circle cx="12" cy="7" r="4" />
                   </svg>
-                  <p className="text-sm font-semibold mb-1">My Rider / Pickup</p>
-                  <p className={`text-xs leading-relaxed ${deliveryMethod === "pickup" ? "text-white/60" : "text-muted"}`}>
+                  <p className="text-sm font-semibold mb-1">
+                    My Rider / Pickup
+                  </p>
+                  <p
+                    className={`text-xs leading-relaxed ${
+                      deliveryMethod === "pickup"
+                        ? "text-white/60"
+                        : "text-muted"
+                    }`}
+                  >
                     Send your rider or pick up yourself. No delivery fee.
                   </p>
                 </button>
               </div>
 
-              {/* Pickup notice */}
               {deliveryMethod === "pickup" && (
                 <div className="mt-4 p-4 bg-amber-50 border border-amber-100 text-amber-800 text-xs leading-relaxed">
-                  <strong>Pickup Note:</strong> After payment, we&apos;ll contact you via WhatsApp with the pickup address and to coordinate your rider&apos;s arrival time.
+                  <strong>Pickup Note:</strong> After payment, we&apos;ll
+                  contact you via WhatsApp with the pickup address and to
+                  coordinate your rider&apos;s arrival time.
                 </div>
               )}
             </div>
 
-            {/* ── Delivery Address (only shown when delivery selected) ── */}
+            {/* Delivery Address */}
             {deliveryMethod === "delivery" && (
               <div className="mb-10">
-                <h3 className="text-lg tracking-wide mb-6 font-serif">
+                <h3
+                  className="text-lg tracking-wide mb-6"
+                  style={{ fontFamily: "'Playfair Display', serif" }}
+                >
                   Delivery Address
                 </h3>
                 <div className="space-y-4">
@@ -363,12 +552,15 @@ export default function CheckoutPage() {
                     <input
                       type="text"
                       value={form.address}
-                      onChange={(e) => handleUpdate("address", e.target.value)}
+                      onChange={(e) =>
+                        handleUpdate("address", e.target.value)
+                      }
                       className="w-full border border-gray-200 px-4 py-3.5 text-sm focus:outline-none focus:border-black transition-colors"
                       placeholder="123 Your Street"
                     />
                   </div>
 
+                  {/* Shipping calculator for all delivery orders */}
                   <ShippingCalculator
                     area={form.area}
                     onAreaChange={(val) => handleUpdate("area", val)}
@@ -383,7 +575,9 @@ export default function CheckoutPage() {
                       <input
                         type="text"
                         value={form.city}
-                        onChange={(e) => handleUpdate("city", e.target.value)}
+                        onChange={(e) =>
+                          handleUpdate("city", e.target.value)
+                        }
                         className="w-full border border-gray-200 px-4 py-3.5 text-sm focus:outline-none focus:border-black transition-colors"
                         placeholder="Lagos"
                       />
@@ -394,12 +588,16 @@ export default function CheckoutPage() {
                       </label>
                       <select
                         value={form.state}
-                        onChange={(e) => handleUpdate("state", e.target.value)}
+                        onChange={(e) =>
+                          handleUpdate("state", e.target.value)
+                        }
                         className="w-full border border-gray-200 px-4 py-3.5 text-sm focus:outline-none focus:border-black transition-colors bg-white"
                       >
                         <option value="">Select State</option>
                         {nigerianStates.map((s) => (
-                          <option key={s} value={s}>{s}</option>
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -420,13 +618,21 @@ export default function CheckoutPage() {
                       className="sr-only"
                     />
                     <div
-                      className={`w-5 h-5 border transition-colors duration-200 flex items-center justify-center ${createAccount
+                      className={`w-5 h-5 border transition-colors duration-200 flex items-center justify-center ${
+                        createAccount
                           ? "bg-black border-black"
                           : "bg-white border-gray-300 group-hover:border-gray-400"
-                        }`}
+                      }`}
                     >
                       {createAccount && (
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                        <svg
+                          width="10"
+                          height="10"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="white"
+                          strokeWidth="3"
+                        >
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
                       )}
@@ -446,31 +652,38 @@ export default function CheckoutPage() {
               </div>
             )}
 
-            {/* Mobile Pay Button */}
+            {/* ── Mobile Pay Button ── */}
             <div className="mt-10 lg:hidden">
               <button
                 onClick={handleProceedToPayment}
                 disabled={processing}
                 className="btn-luxury w-full bg-black text-white py-4 text-[11px] uppercase tracking-[4px] hover:bg-charcoal transition-all disabled:opacity-50"
               >
-                {processing ? "Connecting..." : `Pay ${formatPrice(grandTotal)}`}
+                {processing
+                  ? "Connecting..."
+                  : `Pay ${formatPrice(grandTotal)}`}
               </button>
             </div>
           </div>
 
-          {/* ── Order Summary ── */}
+          {/* ── Right: Order Summary ── */}
           <div className="lg:col-span-2">
             <div className="bg-cream p-8 sticky top-28">
-              <h3 className="text-lg tracking-wide mb-6 font-serif">
+              <h3
+                className="text-lg tracking-wide mb-6"
+                style={{ fontFamily: "'Playfair Display', serif" }}
+              >
                 Order Summary
               </h3>
 
               {/* Items */}
               <div className="space-y-4 mb-6 pb-6 border-b border-gray-200">
-                {items.map((item) => {
-                  const salePrice = getSalePrice(item.price);
-                  return (
-                    <div key={`${item.productId}-${item.size}`} className="flex gap-4">
+                {checkoutItems.map((item) => (
+                  <div
+                    key={`${item.productId}-${item.size}`}
+                    className="flex gap-4"
+                  >
+                    {item.image && (
                       <div className="relative w-16 h-20 overflow-hidden bg-light-gray flex-shrink-0">
                         <Image
                           src={item.image}
@@ -483,16 +696,23 @@ export default function CheckoutPage() {
                           {item.quantity}
                         </span>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{item.name}</p>
-                        <p className="text-xs text-muted">{item.size}</p>
-                      </div>
-                      <p className="text-sm flex-shrink-0">
-                        {formatPrice(salePrice * item.quantity)}
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {item.name}
                       </p>
+                      <p className="text-xs text-muted">{item.size}</p>
+                      {isSubscription && (
+                        <p className="text-xs text-green-700 mt-0.5">
+                          Every 2 months · 10% off
+                        </p>
+                      )}
                     </div>
-                  );
-                })}
+                    <p className="text-sm flex-shrink-0">
+                      {formatPrice(item.price * item.quantity)}
+                    </p>
+                  </div>
+                ))}
               </div>
 
               {/* Totals */}
@@ -506,7 +726,9 @@ export default function CheckoutPage() {
                   <span className="text-muted">Delivery</span>
                   <span>
                     {deliveryMethod === "pickup" ? (
-                      <span className="text-green-700 font-medium">Free — My Rider</span>
+                      <span className="text-green-700 font-medium">
+                        Free — My Rider
+                      </span>
                     ) : shipping.freeShipping ? (
                       <span className="text-green-700">Free</span>
                     ) : shipping.isParkPickup ? (
@@ -514,24 +736,38 @@ export default function CheckoutPage() {
                     ) : form.area ? (
                       formatPrice(shipping.fee)
                     ) : (
-                      <span className="text-muted text-xs">Enter area</span>
+                      <span className="text-muted text-xs italic">
+                        Enter area
+                      </span>
                     )}
                   </span>
                 </div>
 
-                {deliveryMethod === "delivery" && shipping.isParkPickup && form.area && (
-                  <p className="text-[10px] text-amber-700">
-                    🚌 ₦3,500 logistics to bus park + driver fee at pickup
-                  </p>
-                )}
-                {deliveryMethod === "delivery" && shipping.zone && form.area && (
-                  <div className="text-[10px] text-muted">
-                    📦 {shipping.zone.estimatedDays}
-                  </div>
-                )}
+                {/* Delivery notes */}
+                {deliveryMethod === "delivery" &&
+                  shipping.isParkPickup &&
+                  form.area && (
+                    <p className="text-[10px] text-amber-700">
+                      🚌 ₦3,500 logistics to bus park + driver fee at
+                      pickup
+                    </p>
+                  )}
+                {deliveryMethod === "delivery" &&
+                  shipping.zone &&
+                  form.area && (
+                    <p className="text-[10px] text-muted">
+                      📦 {shipping.zone.estimatedDays}
+                    </p>
+                  )}
                 {deliveryMethod === "pickup" && (
                   <p className="text-[10px] text-amber-700">
-                    📍 Pickup address will be sent via WhatsApp after payment
+                    📍 Pickup address will be sent via WhatsApp after
+                    payment
+                  </p>
+                )}
+                {isSubscription && deliveryMethod === "delivery" && (
+                  <p className="text-[10px] text-muted">
+                    Free within Lagos on orders up to ₦200,000
                   </p>
                 )}
               </div>
@@ -543,16 +779,26 @@ export default function CheckoutPage() {
                 </span>
               </div>
 
+              {/* ── Desktop Pay Button ── */}
               <button
                 onClick={handleProceedToPayment}
                 disabled={processing}
                 className="btn-luxury hidden lg:block w-full bg-black text-white py-4 text-[11px] uppercase tracking-[4px] text-center hover:bg-charcoal transition-all disabled:opacity-50"
               >
-                {processing ? "Connecting..." : "Proceed to Payment"}
+                {processing
+                  ? "Connecting..."
+                  : `Pay ${formatPrice(grandTotal)}`}
               </button>
 
               <div className="mt-4 flex items-center justify-center gap-2 text-muted">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                >
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                   <path d="M7 11V7a5 5 0 0110 0v4" />
                 </svg>
@@ -564,27 +810,36 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        {/* Shipping Zones Info — only shown when delivery selected */}
-        {deliveryMethod === "delivery" && (
+        {/* Shipping Zones — regular checkout only */}
+        {!isSubscription && deliveryMethod === "delivery" && (
           <div className="mt-16 pt-12 border-t border-gray-100">
-            <h3 className="text-lg tracking-wide mb-8 font-serif text-center">
+            <h3
+              className="text-lg tracking-wide mb-8 text-center"
+              style={{ fontFamily: "'Playfair Display', serif" }}
+            >
               Delivery Rates
             </h3>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {shippingZones.map((zone) => (
-                <div key={zone.name} className="p-4 bg-gray-50 border border-gray-100">
+                <div
+                  key={zone.name}
+                  className="p-4 bg-gray-50 border border-gray-100"
+                >
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-sm font-medium">{zone.name}</h4>
                     <span className="text-sm font-semibold">
                       {zone.isParkPickup ? (
-                        <span className="text-amber-700 text-xs">Park pickup</span>
+                        <span className="text-amber-700 text-xs">
+                          Park pickup
+                        </span>
                       ) : (
-                        `${zone.fee.toLocaleString()}`
+                        `₦${zone.fee.toLocaleString()}`
                       )}
                     </span>
                   </div>
                   <p className="text-[10px] text-muted mb-2">
-                    {zone.isParkPickup ? "🚌" : ""} {zone.estimatedDays}
+                    {zone.isParkPickup ? "🚌" : ""}{" "}
+                    {zone.estimatedDays}
                   </p>
                   {zone.isParkPickup && (
                     <p className="text-[10px] text-amber-700 mb-2">
@@ -593,7 +848,8 @@ export default function CheckoutPage() {
                   )}
                   <p className="text-[10px] text-muted leading-relaxed">
                     {zone.areas.slice(0, 5).join(", ")}
-                    {zone.areas.length > 5 && ` +${zone.areas.length - 5} more`}
+                    {zone.areas.length > 5 &&
+                      ` +${zone.areas.length - 5} more`}
                   </p>
                 </div>
               ))}

@@ -9,20 +9,22 @@ datasource db {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  name          String
-  email         String         @unique
-  password      String
-  role          String         @default("customer")
-  createdAt     DateTime       @default(now())
-  orders        Order[]
-  subscriptions Subscription[]
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("customer")
+  createdAt DateTime @default(now())
+
+  orders               Order[]
+  subscriptions        Subscription[]
+  pendingSubscriptions PendingSubscription[]
 }
 
 model Order {
   id              String      @id @default(cuid())
   userId          String?
-  user            User?        @relation(fields: [userId], references: [id])
+  user            User?       @relation(fields: [userId], references: [id])
   items           OrderItem[]
   total           Float
   status          String      @default("pending")
@@ -47,18 +49,34 @@ model OrderItem {
   price     Float
 }
 
+model PendingSubscription {
+  id              String   @id @default(cuid())
+  userId          String
+  reference       String   @unique
+  items           Json
+  frequency       String   @default("bimonthly")
+  frequencyMonths Int      @default(2)
+  totalPrice      Float    @default(0)
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 model Subscription {
   id           String   @id @default(cuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
   productId    String
   productName  String
   size         String
-  frequency    String   @default("quarterly")
-  status       String   @default("active")
+  quantity     Int      @default(1)
+  frequency    String   @default("bimonthly")
   price        Float
+  status       String   @default("active")
   nextDelivery DateTime
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model BlogPost {
@@ -73,7 +91,6 @@ model BlogPost {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-
 
 model Subscriber {
   id        String   @id @default(cuid())
