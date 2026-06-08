@@ -115,7 +115,9 @@ export default function CheckoutSuccessPage() {
 
       // ── SUBSCRIPTION: confirm sub only, skip order creation ───────────────
       const subData = localStorage.getItem("jeyscent_subscription");
-      if (subData || checkoutData.isSubscription) {
+      const isSubCheckout = checkoutData.isSubscription === true; // ← use saved flag
+
+      if (isSubCheckout && subData) {
         setIsSubscription(true);
         try {
           await fetch("/api/subscriptions/confirm", { method: "POST" });
@@ -125,8 +127,13 @@ export default function CheckoutSuccessPage() {
         localStorage.removeItem("jeyscent_subscription");
         localStorage.removeItem("jeyscent_checkout");
         setStatus("success");
-        return; // ← exit early, no order created
+        return;
       }
+
+      // If there's leftover subscription data but this is a regular order, ignore it
+      localStorage.removeItem("jeyscent_subscription");
+
+      // ── REGULAR ORDER ─────────────────────────────────────────────────────
 
       // ── REGULAR ORDER: create order as normal ─────────────────────────────
       const orderRes = await fetch("/api/checkout", {
