@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
@@ -22,14 +22,14 @@ type SubscriptionType = (typeof SUBSCRIPTION_TYPES)[number];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface SubscriptionLineItem {
-  id: string; // unique key: productId + size
+  id: string;
   productId: string;
   productName: string;
   productType: string;
   fragrance: string;
   size: string;
   quantity: number;
-  unitPrice: number;        // discounted
+  unitPrice: number;
   originalUnitPrice: number;
   image: string;
 }
@@ -42,28 +42,26 @@ export default function SubscribePage() {
   const { user } = useAuth();
   const router = useRouter();
 
-  // ── Active type tab (just for browsing/adding) ────────────────────────────
+  // ── State ─────────────────────────────────────────────────────────────────
   const [activeType, setActiveType] =
     useState<SubscriptionType>("Reed Diffuser");
-
-  // ── Currently previewed product & size (before adding to basket) ──────────
   const [previewProductId, setPreviewProductId] = useState(
     () => products.find((p) => p.type === "Reed Diffuser")?.id || ""
   );
   const [previewSizeIndex, setPreviewSizeIndex] = useState(0);
   const [previewQty, setPreviewQty] = useState(1);
-
-  // ── Subscription basket (all chosen line items) ───────────────────────────
   const [basket, setBasket] = useState<SubscriptionLineItem[]>([]);
 
+  // ── Clear stale subscription data on mount ────────────────────────────────
+  useEffect(() => {
+    localStorage.removeItem("jeyscent_subscription");
+  }, []);
 
-  // ── Derived from preview ──────────────────────────────────────────────────
+  // ── Derived ───────────────────────────────────────────────────────────────
   const filteredProducts = products.filter((p) => p.type === activeType);
   const previewProduct = products.find((p) => p.id === previewProductId);
   const previewSize = previewProduct?.sizes[previewSizeIndex];
-  const previewUnitPrice = previewSize
-    ? getSalePrice(previewSize.price)
-    : 0;
+  const previewUnitPrice = previewSize ? getSalePrice(previewSize.price) : 0;
   const previewOriginalPrice = previewSize
     ? getOriginalDisplayPrice(previewSize.price)
     : 0;
@@ -102,14 +100,12 @@ export default function SubscribePage() {
     setBasket((prev) => {
       const existing = prev.find((item) => item.id === id);
       if (existing) {
-        // Merge — add qty to existing line
         return prev.map((item) =>
           item.id === id
             ? { ...item, quantity: item.quantity + previewQty }
             : item
         );
       }
-      // New line item
       return [
         ...prev,
         {
@@ -127,7 +123,6 @@ export default function SubscribePage() {
       ];
     });
 
-    // Reset preview qty
     setPreviewQty(1);
   };
 
@@ -179,6 +174,7 @@ export default function SubscribePage() {
     router.push("/checkout?type=subscription");
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="page-transition pt-24 lg:pt-28">
       {/* ── Hero ── */}
@@ -289,17 +285,17 @@ export default function SubscribePage() {
                     <button
                       key={type}
                       onClick={() => handleTypeChange(type)}
-                      className={`border px-4 py-4 text-left transition-all duration-200 ${activeType === type
-                        ? "border-black bg-black text-white"
-                        : "border-gray-200 hover:border-gray-400"
-                        }`}
+                      className={`border px-4 py-4 text-left transition-all duration-200 ${
+                        activeType === type
+                          ? "border-black bg-black text-white"
+                          : "border-gray-200 hover:border-gray-400"
+                      }`}
                     >
                       <p className="text-sm font-semibold mb-1">{type}</p>
                       <p
-                        className={`text-[10px] leading-relaxed ${activeType === type
-                          ? "text-white/60"
-                          : "text-muted"
-                          }`}
+                        className={`text-[10px] leading-relaxed ${
+                          activeType === type ? "text-white/60" : "text-muted"
+                        }`}
                       >
                         {type === "Reed Diffuser"
                           ? "Full set with reeds & bottle."
@@ -323,10 +319,11 @@ export default function SubscribePage() {
                         setPreviewProductId(p.id);
                         setPreviewSizeIndex(0);
                       }}
-                      className={`relative border p-4 text-left transition-all ${previewProductId === p.id
-                        ? "border-black bg-cream"
-                        : "border-gray-200 hover:border-gray-400"
-                        }`}
+                      className={`relative border p-4 text-left transition-all ${
+                        previewProductId === p.id
+                          ? "border-black bg-cream"
+                          : "border-gray-200 hover:border-gray-400"
+                      }`}
                     >
                       <div className="relative aspect-square mb-3 overflow-hidden bg-light-gray">
                         <Image
@@ -374,10 +371,11 @@ export default function SubscribePage() {
                       <button
                         key={size.size}
                         onClick={() => setPreviewSizeIndex(i)}
-                        className={`flex-1 min-w-[100px] px-4 py-4 border text-center transition-all ${previewSizeIndex === i
-                          ? "bg-black text-white border-black"
-                          : "border-gray-200 hover:border-black"
-                          }`}
+                        className={`flex-1 min-w-[100px] px-4 py-4 border text-center transition-all ${
+                          previewSizeIndex === i
+                            ? "bg-black text-white border-black"
+                            : "border-gray-200 hover:border-black"
+                        }`}
                       >
                         <span className="block font-medium text-sm">
                           {size.size}
@@ -404,7 +402,6 @@ export default function SubscribePage() {
                   </p>
 
                   <div className="flex items-center gap-4 mb-5">
-                    {/* Stepper */}
                     <div className="flex items-center border border-gray-200">
                       <button
                         onClick={() =>
@@ -434,7 +431,7 @@ export default function SubscribePage() {
                             Math.max(1, parseInt(e.target.value) || 1)
                           )
                         }
-                        className="w-14 h-10 text-center text-sm font-semibold border-x border-gray-200 focus:outline-none"
+                        className="w-14 h-10 text-center text-sm font-semibold border-x border-gray-200 focus:outline-none appearance-none"
                       />
 
                       <button
@@ -467,7 +464,6 @@ export default function SubscribePage() {
                     </div>
                   </div>
 
-                  {/* Add button */}
                   <button
                     onClick={handleAddToSubscription}
                     className="w-full border-2 border-black py-3.5 text-[11px] uppercase tracking-[4px] hover:bg-black hover:text-white transition-all duration-200 font-medium"
@@ -475,17 +471,16 @@ export default function SubscribePage() {
                     + Add to Subscription
                   </button>
 
-                  {/* Already in basket hint */}
                   {basket.some(
                     (item) =>
                       item.id ===
                       lineItemId(previewProduct.id, previewSize.size)
                   ) && (
-                      <p className="text-[10px] text-green-700 text-center mt-2">
-                        ✓ Already in your subscription — adding more will
-                        increase the quantity.
-                      </p>
-                    )}
+                    <p className="text-[10px] text-green-700 text-center mt-2">
+                      ✓ Already in your subscription — adding more will
+                      increase the quantity.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -525,9 +520,7 @@ export default function SubscribePage() {
                         <line x1="5" y1="12" x2="19" y2="12" />
                       </svg>
                     </div>
-                    <p className="text-sm text-muted">
-                      No items yet.
-                    </p>
+                    <p className="text-sm text-muted">No items yet.</p>
                     <p className="text-xs text-muted mt-1">
                       Pick a product and click{" "}
                       <strong>Add to Subscription</strong>.
@@ -539,11 +532,7 @@ export default function SubscribePage() {
                 {basket.length > 0 && (
                   <div className="space-y-4 mb-6 pb-6 border-b border-gray-200 max-h-[360px] overflow-y-auto pr-1">
                     {basket.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex gap-3 items-start"
-                      >
-                        {/* Thumbnail */}
+                      <div key={item.id} className="flex gap-3 items-start">
                         <div className="relative w-12 h-14 overflow-hidden bg-light-gray flex-shrink-0">
                           <Image
                             src={item.image}
@@ -554,16 +543,12 @@ export default function SubscribePage() {
                           />
                         </div>
 
-                        {/* Info */}
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium truncate">
                             {item.fragrance} {item.productType}
                           </p>
-                          <p className="text-[10px] text-muted">
-                            {item.size}
-                          </p>
+                          <p className="text-[10px] text-muted">{item.size}</p>
 
-                          {/* Inline qty controls */}
                           <div className="flex items-center gap-2 mt-2">
                             <button
                               onClick={() =>
@@ -584,7 +569,7 @@ export default function SubscribePage() {
                                   parseInt(e.target.value) || 1
                                 )
                               }
-                              className="w-10 h-6 text-center text-xs border border-gray-200 focus:outline-none focus:border-black"
+                              className="w-10 h-6 text-center text-xs border border-gray-200 focus:outline-none focus:border-black appearance-none"
                             />
                             <button
                               onClick={() =>
@@ -597,7 +582,6 @@ export default function SubscribePage() {
                           </div>
                         </div>
 
-                        {/* Price + remove */}
                         <div className="flex flex-col items-end gap-2 flex-shrink-0">
                           <p className="text-xs font-semibold">
                             {formatPrice(item.unitPrice * item.quantity)}
@@ -608,9 +592,7 @@ export default function SubscribePage() {
                             )}
                           </p>
                           <button
-                            onClick={() =>
-                              handleRemoveFromBasket(item.id)
-                            }
+                            onClick={() => handleRemoveFromBasket(item.id)}
                             className="text-[10px] text-red-400 hover:text-red-600 transition-colors"
                           >
                             Remove
@@ -637,13 +619,10 @@ export default function SubscribePage() {
                           − {formatPrice(basketSavings)}
                         </span>
                       </div>
-
-                      {/* Delivery */}
                       <div className="flex justify-between text-sm">
                         <span className="text-muted">Delivery</span>
                         <span className="italic text-muted">At checkout</span>
                       </div>
-
                       <div className="flex justify-between text-sm">
                         <span className="text-muted">Frequency</span>
                         <span>{FREQUENCY_LABEL}</span>
@@ -657,7 +636,6 @@ export default function SubscribePage() {
                       </span>
                     </div>
 
-                    {/* Accurate delivery policy note */}
                     <p className="text-[10px] text-muted leading-relaxed mb-1">
                       + delivery fee calculated at checkout.{" "}
                       <span className="text-green-700">
@@ -666,21 +644,22 @@ export default function SubscribePage() {
                     </p>
 
                     <p className="text-xs text-green-700 mb-6">
-                      You save {formatPrice(basketSavings)} every {FREQUENCY_MONTHS} months
+                      You save {formatPrice(basketSavings)} every{" "}
+                      {FREQUENCY_MONTHS} months
                     </p>
 
-                    {/* Refill tip */}
-                    {basket.some((item) => item.productType === "Refill Bottle") && (
+                    {basket.some(
+                      (item) => item.productType === "Refill Bottle"
+                    ) && (
                       <div className="mb-5 p-3 bg-amber-50 border border-amber-100 text-amber-800 text-xs leading-relaxed">
-                        💡 <strong>Refill tip:</strong> Compatible with all JeyScent
-                        vessels. Just pour and reuse.
+                        💡 <strong>Refill tip:</strong> Compatible with all
+                        JeyScent vessels. Just pour and reuse.
                       </div>
                     )}
 
                     <button
                       onClick={handleSubscribe}
-                      disabled={false}
-                      className="btn-luxury w-full bg-black text-white py-4 text-[11px] uppercase tracking-[4px] hover:bg-charcoal transition-all disabled:opacity-50"
+                      className="btn-luxury w-full bg-black text-white py-4 text-[11px] uppercase tracking-[4px] hover:bg-charcoal transition-all"
                     >
                       {user ? "Start Subscription" : "Sign In to Subscribe"}
                     </button>
@@ -749,9 +728,7 @@ export default function SubscribePage() {
                 className="group border-b border-white/10 pb-6"
               >
                 <summary className="flex items-center justify-between cursor-pointer list-none">
-                  <span className="text-sm lg:text-base pr-8">
-                    {faq.q}
-                  </span>
+                  <span className="text-sm lg:text-base pr-8">{faq.q}</span>
                   <svg
                     width="16"
                     height="16"

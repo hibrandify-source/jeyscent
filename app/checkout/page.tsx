@@ -106,6 +106,9 @@ export default function CheckoutPage() {
       } catch {
         router.push("/subscribe");
       }
+    } else {
+      // ✅ Regular checkout — always wipe stale subscription data immediately
+      localStorage.removeItem("jeyscent_subscription");
     }
   }, [isSubscription, router]);
 
@@ -435,8 +438,8 @@ export default function CheckoutPage() {
                   type="button"
                   onClick={() => setDeliveryMethod("delivery")}
                   className={`relative border p-5 text-left transition-all duration-200 ${deliveryMethod === "delivery"
-                      ? "border-black bg-black text-white"
-                      : "border-gray-200 hover:border-gray-400 bg-white"
+                    ? "border-black bg-black text-white"
+                    : "border-gray-200 hover:border-gray-400 bg-white"
                     }`}
                 >
                   {deliveryMethod === "delivery" && (
@@ -470,8 +473,8 @@ export default function CheckoutPage() {
                   <p className="text-sm font-semibold mb-1">We Deliver</p>
                   <p
                     className={`text-xs leading-relaxed ${deliveryMethod === "delivery"
-                        ? "text-white/60"
-                        : "text-muted"
+                      ? "text-white/60"
+                      : "text-muted"
                       }`}
                   >
                     We bring it to your door. Fee calculated by area.
@@ -483,8 +486,8 @@ export default function CheckoutPage() {
                   type="button"
                   onClick={() => setDeliveryMethod("pickup")}
                   className={`relative border p-5 text-left transition-all duration-200 ${deliveryMethod === "pickup"
-                      ? "border-black bg-black text-white"
-                      : "border-gray-200 hover:border-gray-400 bg-white"
+                    ? "border-black bg-black text-white"
+                    : "border-gray-200 hover:border-gray-400 bg-white"
                     }`}
                 >
                   {deliveryMethod === "pickup" && (
@@ -518,8 +521,8 @@ export default function CheckoutPage() {
                   </p>
                   <p
                     className={`text-xs leading-relaxed ${deliveryMethod === "pickup"
-                        ? "text-white/60"
-                        : "text-muted"
+                      ? "text-white/60"
+                      : "text-muted"
                       }`}
                   >
                     Send your rider or pick up yourself. No delivery fee.
@@ -620,8 +623,8 @@ export default function CheckoutPage() {
                     />
                     <div
                       className={`w-5 h-5 border transition-colors duration-200 flex items-center justify-center ${createAccount
-                          ? "bg-black border-black"
-                          : "bg-white border-gray-300 group-hover:border-gray-400"
+                        ? "bg-black border-black"
+                        : "bg-white border-gray-300 group-hover:border-gray-400"
                         }`}
                     >
                       {createAccount && (
