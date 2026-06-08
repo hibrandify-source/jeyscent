@@ -56,7 +56,6 @@ export default function SubscribePage() {
   // ── Subscription basket (all chosen line items) ───────────────────────────
   const [basket, setBasket] = useState<SubscriptionLineItem[]>([]);
 
-  const [subscribing, setSubscribing] = useState(false);
 
   // ── Derived from preview ──────────────────────────────────────────────────
   const filteredProducts = products.filter((p) => p.type === activeType);
@@ -163,8 +162,6 @@ export default function SubscribePage() {
       return;
     }
     if (basket.length === 0) return;
-
-    setSubscribing(true);
 
     localStorage.setItem(
       "jeyscent_subscription",
