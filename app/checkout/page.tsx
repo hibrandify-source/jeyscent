@@ -70,19 +70,22 @@ export default function CheckoutPage() {
   const { user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // ── Always derive isSubscription from the real browser URL ───────────────
+  // useSearchParams can lag during hydration in production causing false reads
   const isSubscription = useMemo(() => {
     if (typeof window !== "undefined") {
-      // In production, trust the actual browser URL over searchParams
-      return new URLSearchParams(window.location.search).get("type") === "subscription";
+      return (
+        new URLSearchParams(window.location.search).get("type") ===
+        "subscription"
+      );
     }
+    // SSR fallback
     return searchParams.get("type") === "subscription";
   }, [searchParams]);
 
-  // ── Subscription data ─────────────────────────────────────────────────────
   const [subscriptionData, setSubscriptionData] =
     useState<SubscriptionData | null>(null);
-
-  // ── Form & UI state ───────────────────────────────────────────────────────
   const [deliveryMethod, setDeliveryMethod] =
     useState<DeliveryMethod>("delivery");
   const [form, setForm] = useState({
@@ -101,60 +104,52 @@ export default function CheckoutPage() {
 
   // ── Load subscription data on mount ──────────────────────────────────────
   useEffect(() => {
-    if (isSubscription) {
+    // Always use window.location as the source of truth in production
+    const urlIsSubscription =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("type") === "subscription";
+
+    if (urlIsSubscription) {
       const raw = localStorage.getItem("jeyscent_subscription");
       const activeSession = sessionStorage.getItem("jeyscent_sub_session");
 
       if (!raw) {
-        // ✅ Was redirecting to /subscribe — but if URL has no ?type=subscription
-        // this should never fire. Add a hard URL check as safety net.
-        if (typeof window !== "undefined" &&
-          !window.location.search.includes("type=subscription")) {
-          // URL says regular checkout — ignore subscription logic entirely
-          localStorage.removeItem("jeyscent_subscription");
-          setIsChecking(false);
-          return;
-        }
         router.push("/subscribe");
         return;
       }
 
       try {
         const parsed = JSON.parse(raw);
-        const activeSession = sessionStorage.getItem("jeyscent_sub_session");
 
+        // Validate session ID
         if (!activeSession || parsed.sessionId !== activeSession) {
           localStorage.removeItem("jeyscent_subscription");
-          // ✅ Safety check — only redirect to /subscribe if URL actually says subscription
-          if (window.location.search.includes("type=subscription")) {
-            router.push("/subscribe");
-          }
+          router.push("/subscribe");
           return;
         }
 
+        // Validate age (2 hours)
         if (parsed.savedAt && Date.now() - parsed.savedAt > 7_200_000) {
           localStorage.removeItem("jeyscent_subscription");
           sessionStorage.removeItem("jeyscent_sub_session");
-          if (window.location.search.includes("type=subscription")) {
-            router.push("/subscribe");
-          }
+          router.push("/subscribe");
           return;
         }
 
         setSubscriptionData(parsed);
       } catch {
         localStorage.removeItem("jeyscent_subscription");
-        if (window.location.search.includes("type=subscription")) {
-          router.push("/subscribe");
-        }
+        router.push("/subscribe");
       }
     } else {
-      // Regular checkout — wipe any stale subscription data
+      // Regular checkout — always wipe stale subscription data
       localStorage.removeItem("jeyscent_subscription");
       sessionStorage.removeItem("jeyscent_sub_session");
     }
+
     setIsChecking(false);
-  }, [isSubscription, router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // ← run once on mount only, using window.location directly
 
   // ── Pre-fill from logged-in user ──────────────────────────────────────────
   useEffect(() => {
@@ -178,14 +173,21 @@ export default function CheckoutPage() {
 
   // ── Redirect to cart if no items (regular checkout only) ──────────────────
   useEffect(() => {
-    if (!isSubscription) {
+    const urlIsSubscription =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("type") === "subscription";
+
+    if (!urlIsSubscription) {
       if (items.length === 0 && !processing) {
         const saved = localStorage.getItem("jeyscent_checkout");
-        if (!saved) router.push("/cart");
+        if (!saved) {
+          router.push("/cart");
+          return;
+        }
       }
     }
     setIsChecking(false);
-  }, [isSubscription, items, router, processing]);
+  }, [items, router, processing]);
 
   // ── Checkout items ────────────────────────────────────────────────────────
   const checkoutItems: CheckoutItem[] = useMemo(() => {
