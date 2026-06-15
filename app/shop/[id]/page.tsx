@@ -152,7 +152,7 @@ export default function ProductDetailPage() {
                     alt={product.name}
                     preset="product"
                     fill
-                    priority={i === 0}
+                    priority
                     sizes="(max-width: 1024px) 100vw, 50vw"
                     className="object-cover object-center"
                   />
