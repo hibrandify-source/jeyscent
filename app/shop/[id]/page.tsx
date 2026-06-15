@@ -1,7 +1,7 @@
 "use client";
 
 import CloudinaryImage from "@/components/CloudinaryImage";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -57,6 +57,41 @@ export default function ProductDetailPage() {
   const salePrice    = getSalePrice(basePrice);
   const slashedPrice = getOriginalDisplayPrice(basePrice);
 
+  const allDetailImages = [product.image, ...product.gallery];
+  const detailImages = [...new Set(allDetailImages)];
+  const hasMultipleDetail = detailImages.length > 1;
+
+  const touchStartX = useRef(0);
+  const swiped = useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    swiped.current = false;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const x = e.touches[0].clientX;
+    const diff = touchStartX.current - x;
+    if (Math.abs(diff) > 10) {
+      swiped.current = true;
+    }
+    if (Math.abs(diff) > 20) {
+      e.preventDefault();
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!swiped.current) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0 && activeImage < detailImages.length - 1) {
+        setActiveImage(activeImage + 1);
+      } else if (diff < 0 && activeImage > 0) {
+        setActiveImage(activeImage - 1);
+      }
+    }
+  };
+
   const handleAddToCart = () => {
     addItem({
       productId: product.id,
@@ -98,16 +133,73 @@ export default function ProductDetailPage() {
         <div className="flex flex-col lg:grid lg:grid-cols-2 gap-0 lg:gap-20">
 
           {/* Images Column */}
-          <div className="relative w-full h-[50vh] lg:h-auto flex-shrink-0 bg-gray-50">
-            <CloudinaryImage
-              publicId={product.gallery[activeImage] || product.image}
-              alt={product.name}
-              preset="product"
-              fill
-              priority
-              sizes="(max-width: 1024px) 100vw, 50vw"
-              className="object-cover object-center"
-            />
+          <div className="relative w-full h-[50vh] lg:h-auto flex-shrink-0 bg-gray-50 overflow-hidden">
+            <div
+              className="flex h-full"
+              onTouchStart={hasMultipleDetail ? handleTouchStart : undefined}
+              onTouchMove={hasMultipleDetail ? handleTouchMove : undefined}
+              onTouchEnd={hasMultipleDetail ? handleTouchEnd : undefined}
+              style={{
+                transform: `translateX(-${activeImage * 100}%)`,
+                transition: "transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+                width: `${detailImages.length * 100}%`,
+              }}
+            >
+              {detailImages.map((img, i) => (
+                <div key={i} className="relative h-full" style={{ width: `${100 / detailImages.length}%` }}>
+                  <CloudinaryImage
+                    publicId={img}
+                    alt={product.name}
+                    preset="product"
+                    fill
+                    priority={i === 0}
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                    className="object-cover object-center"
+                  />
+                </div>
+              ))}
+            </div>
+            {/* Swipe arrows */}
+            {hasMultipleDetail && (
+              <>
+                {activeImage > 0 && (
+                  <button
+                    onClick={() => setActiveImage(activeImage - 1)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/80 hover:bg-white flex items-center justify-center shadow-sm transition-all"
+                    aria-label="Previous image"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                  </button>
+                )}
+                {activeImage < detailImages.length - 1 && (
+                  <button
+                    onClick={() => setActiveImage(activeImage + 1)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/80 hover:bg-white flex items-center justify-center shadow-sm transition-all"
+                    aria-label="Next image"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+                )}
+              </>
+            )}
+            {/* Dots */}
+            {hasMultipleDetail && (
+              <div className="absolute bottom-5 left-0 right-0 flex justify-center gap-1.5 z-10">
+                {detailImages.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveImage(i)}
+                    className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
+                      i === activeImage ? "bg-white w-3" : "bg-white/50"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
             {/* Fragrance Badge */}
             <div className="absolute top-5 left-5 z-10">
               <span className="bg-white/90 backdrop-blur-sm px-4 py-2 text-[10px] uppercase tracking-[3px] shadow-sm">
@@ -314,10 +406,10 @@ export default function ProductDetailPage() {
       </section>
 
       {/* Thumbnail Gallery */}
-      {product.gallery.length > 1 && (
+      {detailImages.length > 1 && (
         <div className="max-w-7xl mx-auto px-6 lg:px-12 py-6">
           <div className="flex gap-3">
-            {product.gallery.map((img, i) => (
+            {detailImages.map((img, i) => (
               <button
                 key={i}
                 onClick={() => setActiveImage(i)}
