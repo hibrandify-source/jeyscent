@@ -46,6 +46,19 @@ export function cloudinaryUrl(
 }
 
 /**
+ * Inject sizing transforms into an existing Cloudinary full URL.
+ * Turns a full-res URL into a properly sized one.
+ */
+export function cldResize(url: string, w: number, h: number): string {
+  if (!url.includes("res.cloudinary.com")) return url;
+  const idx = url.indexOf("/upload/");
+  if (idx === -1) return url;
+  const before = url.slice(0, idx + 8);
+  const after  = url.slice(idx + 8);
+  return `${before}w_${w},h_${h},c_fill,g_auto/${after}`;
+}
+
+/**
  * Pre-built image presets for common use cases
  */
 export const cldImage = {

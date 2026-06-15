@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import CloudinaryImage from "@/components/CloudinaryImage";
+import { cldResize } from "@/lib/cloudinary";
 import Link from "next/link";
 import { Product } from "@/lib/types";
 import { formatPrice, getSalePrice, getOriginalDisplayPrice } from "@/data/products";
@@ -68,28 +69,19 @@ export default function ProductCard({
       {/* Image Container */}
       <div className="relative aspect-[3/4] overflow-hidden bg-light-gray">
         <div
-          className="flex h-full cursor-grab active:cursor-grabbing"
           onTouchStart={hasMultiple ? handleTouchStart : undefined}
           onTouchMove={hasMultiple ? handleTouchMove : undefined}
           onTouchEnd={hasMultiple ? handleTouchEnd : undefined}
           onClick={hasMultiple ? handleClick : undefined}
-          style={{
-            transform: `translateX(-${current * 100}%)`,
-            transition: "transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
-            width: `${images.length * 100}%`,
-          }}
+          className="relative w-full h-full"
         >
           {images.map((img, i) => (
-            <div key={i} className="relative h-full" style={{ width: `${100 / images.length}%` }}>
-              <CloudinaryImage
-                publicId={img}
-                alt={product.name}
-                preset="card"
-                fill
-                priority
-                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              />
-            </div>
+            <img
+              key={i}
+              src={cldResize(img, 600, 800)}
+              alt={product.name}
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${i === current ? "opacity-100" : "opacity-0"}`}
+            />
           ))}
         </div>
 

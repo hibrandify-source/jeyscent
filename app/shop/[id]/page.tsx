@@ -1,6 +1,7 @@
 "use client";
 
 import CloudinaryImage from "@/components/CloudinaryImage";
+import { cldResize } from "@/lib/cloudinary";
 import { useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -133,32 +134,20 @@ export default function ProductDetailPage() {
         <div className="flex flex-col lg:grid lg:grid-cols-2 gap-0 lg:gap-20">
 
           {/* Images Column */}
-          <div className="relative w-full h-[50vh] lg:h-auto flex-shrink-0 bg-gray-50 overflow-hidden">
-            <div
-              className="flex h-full"
-              onTouchStart={hasMultipleDetail ? handleTouchStart : undefined}
-              onTouchMove={hasMultipleDetail ? handleTouchMove : undefined}
-              onTouchEnd={hasMultipleDetail ? handleTouchEnd : undefined}
-              style={{
-                transform: `translateX(-${activeImage * 100}%)`,
-                transition: "transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
-                width: `${detailImages.length * 100}%`,
-              }}
-            >
-              {detailImages.map((img, i) => (
-                <div key={i} className="relative h-full" style={{ width: `${100 / detailImages.length}%` }}>
-                  <CloudinaryImage
-                    publicId={img}
-                    alt={product.name}
-                    preset="product"
-                    fill
-                    priority
-                    sizes="(max-width: 1024px) 100vw, 50vw"
-                    className="object-cover object-center"
-                  />
-                </div>
-              ))}
-            </div>
+          <div
+            className="relative w-full h-[50vh] lg:h-auto lg:aspect-[3/4] flex-shrink-0 bg-gray-50 overflow-hidden"
+            onTouchStart={hasMultipleDetail ? handleTouchStart : undefined}
+            onTouchMove={hasMultipleDetail ? handleTouchMove : undefined}
+            onTouchEnd={hasMultipleDetail ? handleTouchEnd : undefined}
+          >
+            {detailImages.map((img, i) => (
+              <img
+                key={i}
+                src={cldResize(img, 800, 1067)}
+                alt={product.name}
+                className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-300 ${i === activeImage ? "opacity-100" : "opacity-0"}`}
+              />
+            ))}
             {/* Swipe arrows */}
             {hasMultipleDetail && (
               <>
