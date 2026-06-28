@@ -2,8 +2,8 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect, useMemo } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { products } from "@/data/products";
 import ProductCard from "@/components/ProductCard";
 
@@ -26,13 +26,21 @@ const collectionBanners: Record<string, string> = {
 
 export default function ShopPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const initialFragrance = searchParams.get("fragrance") || "all";
-
   const initialType = searchParams.get("type") || "all";
 
   const [fragrance, setFragrance] = useState(initialFragrance);
   const [type, setType] = useState(initialType);
   const [sortBy, setSortBy] = useState("name");
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (fragrance !== "all") params.set("fragrance", fragrance);
+    if (type !== "all") params.set("type", type);
+    const qs = params.toString();
+    router.replace(`/shop${qs ? `?${qs}` : ""}`, { scroll: false });
+  }, [fragrance, type, router]);
 
   const filtered = useMemo(() => {
     let result = [...products];
