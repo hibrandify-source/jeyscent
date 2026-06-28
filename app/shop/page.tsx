@@ -28,8 +28,10 @@ export default function ShopPage() {
   const searchParams = useSearchParams();
   const initialFragrance = searchParams.get("fragrance") || "all";
 
+  const initialType = searchParams.get("type") || "all";
+
   const [fragrance, setFragrance] = useState(initialFragrance);
-  const [type, setType] = useState("all");
+  const [type, setType] = useState(initialType);
   const [sortBy, setSortBy] = useState("name");
 
   const filtered = useMemo(() => {

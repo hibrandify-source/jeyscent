@@ -83,18 +83,18 @@ export default function Footer() {
             </h5>
             <ul className="space-y-3">
               {[
-                "Reed Diffusers",
-                "Car Diffusers",
-                "Refill Bottle",
-                "Room Sprays",
-                "Subscriptions",
+                { label: "Reed Diffusers", href: "/shop?type=reed-diffuser" },
+                { label: "Car Diffusers", href: "/shop?type=car-diffuser" },
+                { label: "Refill Bottle", href: "/shop?type=refill-bottle" },
+                { label: "Room Sprays", href: "/shop?type=room-spray" },
+                { label: "Subscriptions", href: "/subscribe" },
               ].map((item) => (
-                <li key={item}>
+                <li key={item.label}>
                   <Link
-                    href="/shop"
+                    href={item.href}
                     className="text-white/40 text-sm hover:text-white transition-colors duration-300"
                   >
-                    {item}
+                    {item.label}
                   </Link>
                 </li>
               ))}
