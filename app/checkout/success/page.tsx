@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import Link from "next/link";
 import { formatPrice } from "@/data/products";
+import { purchase } from "@/components/MetaPixel";
 
 interface CheckoutData {
   form: {
@@ -124,6 +125,15 @@ export default function CheckoutSuccessPage() {
         } catch (subErr) {
           console.error("Subscription confirm error:", subErr);
         }
+
+        purchase({
+          value: checkoutData.grandTotal,
+          currency: "NGN",
+          content_ids: checkoutData.items.map((i) => i.productId),
+          content_type: "product",
+          num_items: checkoutData.items.reduce((sum, i) => sum + i.quantity, 0),
+        });
+
         localStorage.removeItem("jeyscent_subscription");
         sessionStorage.removeItem("jeyscent_sub_session");
         localStorage.removeItem("jeyscent_checkout");

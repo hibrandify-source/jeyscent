@@ -7,12 +7,15 @@ import { useAuth } from "@/context/AuthContext";
 import {
   products,
   formatPrice,
-  getSalePrice,
-  getOriginalDisplayPrice,
+  getBasePrice,
 } from "@/data/products";
 
 // ── Subscription config ───────────────────────────────────────────────────────
 const FREQUENCY_MONTHS = 2;
+const SUBSCRIPTION_DISCOUNT = 0.90; // 10% off for subscribers
+
+const getSubPrice = (storePrice: number) =>
+  Math.round(getBasePrice(storePrice) * SUBSCRIPTION_DISCOUNT);
 const FREQUENCY_LABEL = "Every 2 months";
 const FREQUENCY_VALUE = "bimonthly";
 
@@ -64,9 +67,11 @@ export default function SubscribePage() {
   const filteredProducts = products.filter((p) => p.type === activeType);
   const previewProduct = products.find((p) => p.id === previewProductId);
   const previewSize = previewProduct?.sizes[previewSizeIndex];
-  const previewUnitPrice = previewSize ? getSalePrice(previewSize.price) : 0;
+  const previewUnitPrice = previewSize
+    ? getSubPrice(previewSize.price)
+    : 0;
   const previewOriginalPrice = previewSize
-    ? getOriginalDisplayPrice(previewSize.price)
+    ? getBasePrice(previewSize.price)
     : 0;
 
   // ── Basket totals ─────────────────────────────────────────────────────────
@@ -121,7 +126,7 @@ export default function SubscribePage() {
           quantity: previewQty,
           unitPrice: previewUnitPrice,
           originalUnitPrice: previewOriginalPrice,
-          image: previewProduct.image,
+          image: previewProduct.sizeImages?.[previewSize.size]?.image ?? previewProduct.image,
         },
       ];
     });
@@ -389,11 +394,11 @@ export default function SubscribePage() {
                         </span>
                         <span className="block text-xs mt-1 opacity-60">
                           <s>
-                            {formatPrice(getOriginalDisplayPrice(size.price))}
+                            {formatPrice(getBasePrice(size.price))}
                           </s>
                         </span>
                         <span className="block text-xs mt-0.5 font-medium">
-                          {formatPrice(getSalePrice(size.price))}
+                          {formatPrice(getSubPrice(size.price))}
                         </span>
                       </button>
                     ))}

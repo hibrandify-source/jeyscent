@@ -5,7 +5,7 @@ import CloudinaryImage from "@/components/CloudinaryImage";
 import { cldResize } from "@/lib/cloudinary";
 import Link from "next/link";
 import { Product } from "@/lib/types";
-import { formatPrice, getSalePrice, getOriginalDisplayPrice } from "@/data/products";
+import { formatPrice, getSalePrice } from "@/data/products";
 
 export default function ProductCard({
   product,
@@ -138,12 +138,6 @@ export default function ProductCard({
           </span>
         </div>
 
-        {/* Discount Badge */}
-        <div className="absolute top-4 right-4">
-          <span className="bg-black text-white px-2 py-1 text-[9px] uppercase tracking-[2px]">
-            10% off
-          </span>
-        </div>
       </div>
 
       {/* Info */}
@@ -160,18 +154,10 @@ export default function ProductCard({
 
         {/* Price row */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Sale price — what buyer pays */}
           <span className="text-sm font-semibold text-black">
             {lowestSale === highestSale
               ? formatPrice(lowestSale)
               : `${formatPrice(lowestSale)} — ${formatPrice(highestSale)}`}
-          </span>
-
-          {/* Original price — crossed out */}
-          <span className="text-xs text-muted line-through">
-            {lowestBase === highestBase
-              ? formatPrice(getOriginalDisplayPrice(lowestBase))
-              : `${formatPrice(getOriginalDisplayPrice(lowestBase))} — ${formatPrice(getOriginalDisplayPrice(highestBase))}`}
           </span>
         </div>
 

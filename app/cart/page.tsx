@@ -1,7 +1,7 @@
 "use client";
 
 import { useCart } from "@/context/CartContext";
-import { formatPrice, getSalePrice, getOriginalDisplayPrice } from "@/data/products";
+import { formatPrice, getSalePrice } from "@/data/products";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -110,7 +110,6 @@ export default function CartPage() {
             <div className="divide-y divide-light-gray">
               {items.map((item) => {
                 const itemSalePrice = getSalePrice(item.price);
-                const itemOriginal = getOriginalDisplayPrice(item.price);
 
                 return (
                   <div
@@ -140,9 +139,6 @@ export default function CartPage() {
                           <span className="text-xs font-medium">
                             {formatPrice(itemSalePrice)}
                           </span>
-                          <span className="text-xs text-muted line-through">
-                            {formatPrice(itemOriginal)}
-                          </span>
                         </div>
                       </div>
                     </div>
@@ -161,9 +157,6 @@ export default function CartPage() {
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="text-xs font-medium">
                             {formatPrice(itemSalePrice)}
-                          </span>
-                          <span className="text-xs text-muted line-through">
-                            {formatPrice(itemOriginal)}
                           </span>
                         </div>
                       </div>

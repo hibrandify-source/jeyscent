@@ -48,6 +48,43 @@ export function purchase(params: {
   }
 }
 
+export function viewContent(params: {
+  content_ids: string[];
+  content_name: string;
+  content_type: string;
+  content_category?: string;
+  value?: number;
+  currency?: string;
+}) {
+  if (typeof window !== "undefined" && window.fbq) {
+    window.fbq("track", "ViewContent", params);
+  }
+}
+
+export function initiateCheckout(params: {
+  content_ids: string[];
+  content_type: string;
+  num_items: number;
+  value: number;
+  currency: string;
+}) {
+  if (typeof window !== "undefined" && window.fbq) {
+    window.fbq("track", "InitiateCheckout", params);
+  }
+}
+
+export function addPaymentInfo(params: {
+  content_ids: string[];
+  content_type: string;
+  num_items: number;
+  value: number;
+  currency: string;
+}) {
+  if (typeof window !== "undefined" && window.fbq) {
+    window.fbq("track", "AddPaymentInfo", params);
+  }
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 export default function MetaPixel() {
   const pathname = usePathname();

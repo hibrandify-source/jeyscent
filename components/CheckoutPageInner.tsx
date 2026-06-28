@@ -4,12 +4,9 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
-import {
-  formatPrice,
-  getSalePrice,
-  getOriginalDisplayPrice,
-} from "@/data/products";
+import { formatPrice } from "@/data/products";
 import { getShippingFee, shippingZones } from "@/lib/shipping";
+import { initiateCheckout, addPaymentInfo } from "@/components/MetaPixel";
 import ShippingCalculator from "@/components/ShippingCalculator";
 import Image from "next/image";
 
@@ -289,6 +286,24 @@ export default function CheckoutPageInner({ isSubscription }: Props) {
       };
 
       localStorage.setItem("jeyscent_checkout", JSON.stringify(checkoutData));
+
+      const numItems = checkoutItems.reduce((sum, i) => sum + i.quantity, 0);
+
+      initiateCheckout({
+        content_ids: checkoutItems.map((i) => i.productId),
+        content_type: "product",
+        num_items: numItems,
+        value: grandTotal,
+        currency: "NGN",
+      });
+
+      addPaymentInfo({
+        content_ids: checkoutItems.map((i) => i.productId),
+        content_type: "product",
+        num_items: numItems,
+        value: grandTotal,
+        currency: "NGN",
+      });
 
       const res = await fetch("/api/payment/initialize", {
         method: "POST",

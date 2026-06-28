@@ -14,6 +14,7 @@ export interface Product {
   longDescription: string;
   image: string;
   gallery: string[];
+  sizeImages?: Record<string, { image: string; gallery?: string[] }>;
   duration: string;
   features: string[];
 }

@@ -8,6 +8,7 @@ import {
 } from "react";
 import { CartItem } from "@/lib/types";
 import { getSalePrice } from "@/data/products";
+import { addToCart } from "@/components/MetaPixel";
 
 interface CartContextType {
   items: CartItem[];
@@ -58,15 +59,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
         : [...prev, newItem];
 
       // ── Meta Pixel: AddToCart ──────────────────────────────────────────
-      if (typeof window !== "undefined" && window.fbq) {
-        window.fbq("track", "AddToCart", {
-          content_ids: [newItem.productId],
-          content_name: newItem.name,
-          content_type: "product",
-          value: getSalePrice(newItem.price) * newItem.quantity,
-          currency: "NGN",
-        });
-      }
+      addToCart({
+        content_ids: [newItem.productId],
+        content_name: newItem.name,
+        content_type: "product",
+        value: getSalePrice(newItem.price) * newItem.quantity,
+        currency: "NGN",
+      });
 
       return updated;
     });

@@ -2,19 +2,19 @@
 
 import CloudinaryImage from "@/components/CloudinaryImage";
 import { cldResize } from "@/lib/cloudinary";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   getProduct,
   formatPrice,
   getSalePrice,
-  getOriginalDisplayPrice,
   products,
 } from "@/data/products";
 import { useCart } from "@/context/CartContext";
 import ProductCard from "@/components/ProductCard";
 import { FREE_SHIPPING_THRESHOLD } from "@/lib/shipping";
+import { viewContent } from "@/components/MetaPixel";
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -30,6 +30,17 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState(0);
   const [added, setAdded] = useState(false);
+
+  useEffect(() => {
+    if (product) {
+      viewContent({
+        content_ids: [product.id],
+        content_name: product.name,
+        content_type: "product",
+        content_category: product.fragrance,
+      });
+    }
+  }, [product]);
 
   if (!product) {
     return (
@@ -56,9 +67,11 @@ export default function ProductDetailPage() {
   const currentSize  = product.sizes[selectedSize];
   const basePrice    = currentSize.price;
   const salePrice    = getSalePrice(basePrice);
-  const slashedPrice = getOriginalDisplayPrice(basePrice);
 
-  const allDetailImages = [product.image, ...product.gallery];
+  const sizeImg = product.sizeImages?.[currentSize.size];
+  const currentImage = sizeImg?.image ?? product.image;
+  const currentGallery = sizeImg?.gallery ?? product.gallery;
+  const allDetailImages = [currentImage, ...currentGallery];
   const detailImages = [...new Set(allDetailImages)];
   const hasMultipleDetail = detailImages.length > 1;
 
@@ -102,7 +115,7 @@ export default function ProductDetailPage() {
       size: currentSize.size,
       price: basePrice,
       quantity,
-      image: product.image,
+      image: sizeImg?.image ?? product.image,
     });
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
@@ -195,12 +208,6 @@ export default function ProductDetailPage() {
                 {product.fragrance}
               </span>
             </div>
-            {/* Discount Badge */}
-            <div className="absolute top-5 right-5 z-10">
-              <span className="bg-black text-white px-3 py-1.5 text-[10px] uppercase tracking-[2px]">
-                10% off
-              </span>
-            </div>
           </div>
 
           {/* Info Column */}
@@ -221,12 +228,6 @@ export default function ProductDetailPage() {
             <div className="flex items-baseline gap-3 mb-6">
               <span className="text-2xl font-semibold text-black">
                 {formatPrice(salePrice)}
-              </span>
-              <span className="text-base text-muted line-through">
-                {formatPrice(slashedPrice)}
-              </span>
-              <span className="text-[10px] bg-black text-white px-2 py-1 uppercase tracking-[2px]">
-                10% off
               </span>
             </div>
 

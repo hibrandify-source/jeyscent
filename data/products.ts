@@ -2,7 +2,7 @@ import { Product } from "@/lib/types";
 
 // ── Price Config ─────────────────────────────────────────────────────────────
 const FEE_MULTIPLIER = 1.02; // 2% baked in to cover gateway fees silently
-const DISCOUNT_MULTIPLIER = 0.90; // 10% off for buyer
+const DISCOUNT_MULTIPLIER = 1.0; // no active discount
 
 // ── Price Helpers ─────────────────────────────────────────────────────────────
 
@@ -15,9 +15,8 @@ export const getBasePrice = (storePrice: number) =>
   Math.round(storePrice * FEE_MULTIPLIER);
 
 /**
- * Sale price — 10% off the fee-buffered base.
- * This is what buyer SEES and what gets CHARGED at checkout.
- * e.g. 15000 → 15300 × 0.90 = 13770
+ * Sale price — same as base price (no active discount).
+ * Ready to accept a DISCOUNT_MULTIPLIER < 1 when needed.
  */
 export const getSalePrice = (storePrice: number) =>
   Math.round(getBasePrice(storePrice) * DISCOUNT_MULTIPLIER);
@@ -57,12 +56,24 @@ export const products: Product[] = [
     longDescription:
       "Inspired by the story of Ruth — loyalty, gentleness, and quiet strength — this fragrance was created to bring comfort into everyday spaces. Ruth blends creamy strawberry notes with soft vanilla and delicate florals, creating a scent that feels warm, peaceful, and inviting. Designed for bedrooms, cozy corners, and intimate spaces, the reed diffuser slowly releases fragrance for a continuous scent experience that feels calm and effortless.",
     image:
-      "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1776766380/reed_diffuser-3_bskomi.jpg",
+      "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1782635373/ruth200ml_gjumr0.jpg",
     gallery: [
-      "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1776766380/reed_diffuser-3_bskomi.jpg",
-      "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1776766380/reed_diffusser-1_yzqx0u.jpg",
-      "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1776766381/reed_diffuser-2_rushfx.jpg",
+      "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1782635373/ruth100ml_xeyh7f.jpg",
     ],
+    sizeImages: {
+      "50ml": {
+        image: "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1776766380/reed_diffuser-3_bskomi.jpg",
+        gallery: ["https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1776766380/reed_diffusser-1_yzqx0u.jpg"],
+      },
+      "100ml": {
+        image: "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1782635373/ruth100ml_xeyh7f.jpg",
+        gallery: ["https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1776766380/reed_diffuser-3_bskomi.jpg"],
+      },
+      "200ml": {
+        image: "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1782635373/ruth200ml_gjumr0.jpg",
+        gallery: ["https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1782635372/ruth200mlreed_fzzc8e.jpg"],
+      },
+    },
     duration: "Lasts up to 2-3 months",
     features: [
       "Natural reed sticks included",
@@ -171,11 +182,24 @@ export const products: Product[] = [
     longDescription:
       "Inspired by strength, wisdom, and timeless elegance, Proverbs blends warm amber, soft musk, rose, and creamy vanilla into a deep, luxurious fragrance experience. Designed for those who love bold yet balanced scents, this reed diffuser fills your space gradually with richness and sophistication. Perfect for living rooms, offices, and spaces where presence matters.",
     image:
-      "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1776766380/reed_diffuser-3_bskomi.jpg",
+      "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1782635373/proverbs200ml_2_xhf79i.jpg",
     gallery: [
-      "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1776766380/reed_diffuser-3_bskomi.jpg",
-      "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1776766381/reed_diffuser-2_rushfx.jpg",
+      "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1782635373/proverbs100ml_czhxnz.jpg",
     ],
+    sizeImages: {
+      "50ml": {
+        image: "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1776766380/reed_diffuser-3_bskomi.jpg",
+        gallery: ["https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1776766380/reed_diffusser-1_yzqx0u.jpg"],
+      },
+      "100ml": {
+        image: "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1782635373/proverbs100ml_czhxnz.jpg",
+        gallery: ["https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1776766380/reed_diffuser-3_bskomi.jpg"],
+      },
+      "200ml": {
+        image: "https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1782635373/proverbs200ml_2_xhf79i.jpg",
+        gallery: ["https://res.cloudinary.com/dkx1jje3g/image/upload/q_auto/f_auto/v1782635374/proverbs200ml_dzwnfk.jpg"],
+      },
+    },
     duration: "Lasts up to 2-3 months",
     features: [
       "Natural reed sticks included",
