@@ -72,6 +72,12 @@ export default function Header() {
               >
                 Subscribe
               </Link>
+              <Link
+                href="/classes"
+                className="text-[11px] uppercase tracking-[3px] text-charcoal hover:text-black transition-colors duration-300"
+              >
+                Class
+              </Link>
             </nav>
 
             {/* Logo */}
@@ -200,6 +206,7 @@ export default function Header() {
                 { href: "/shop", label: "Shop" },
                 { href: "/our-story", label: "Our Story" },
                 { href: "/subscribe", label: "Subscribe" },
+                { href: "/classes", label: "Class" },
                 { href: "/blog", label: "Journal" },
                 { href: "/jeycraft", label: "Jey Craft" },
                 {

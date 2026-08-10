@@ -99,3 +99,95 @@ model Subscriber {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// ============ CLASS MODULE ============
+// Paywalled learning module. A class can be one of two kinds:
+//   • "video" — pre-recorded video, organized into EPISODES under one title.
+//   • "pdf"   — a single downloadable PDF document.
+//
+// For video classes, `singleEpisode` controls whether the class hosts a
+// single video (one ClassEpisode row allowed) or a multi-episode series.
+// `pdfUrl` is optional on EVERY class: a video class may optionally bundle a
+// downloadable PDF alongside its episodes; a pdf class uses it as its primary
+// asset.
+//
+// Access is granted by a per-enrollment access pin and locked to the first IP
+// address that consumes the pin (one device per enrollment). Pricing has an
+// early-bird tier: the first `earlyBirdMax` students pay `earlyBirdPrice`;
+// everyone else pays `price`. One enrollment unlocks ALL episodes (video) and
+// any bundled PDF — the pin maps to the class, not to individual assets.
+
+model Class {
+  id             String   @id @default(cuid())
+  title          String
+  description    String
+  kind           String   @default("video") // "video" | "pdf"
+  singleEpisode  Boolean  @default(false) // video classes: restrict to 1 episode?
+  price          Float    @default(40000)
+  earlyBirdPrice Float    @default(30000)
+  earlyBirdMax   Int      @default(10)
+  earlyBirdUsed  Int      @default(0)
+  pdfUrl         String? // pdf class: primary asset. video class: optional companion PDF.
+  imageUrl       String   @default("")
+  published      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  enrollments        ClassEnrollment[]
+  pendingEnrollments PendingEnrollment[]
+  episodes           ClassEpisode[]
+}
+
+model ClassEpisode {
+  id            String   @id @default(cuid())
+  classId       String
+  title         String
+  episodeNumber Int
+  videoUrl      String   @default("")
+  videoPassword String   @default("")
+  duration      String?
+  createdAt     DateTime @default(now())
+
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+}
+
+model PendingEnrollment {
+  id          String   @id @default(cuid())
+  classId     String
+  reference   String   @unique
+  name        String
+  email       String
+  phone       String
+  amount      Float
+  isEarlyBird Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+}
+
+model ClassEnrollment {
+  id          String   @id @default(cuid())
+  classId     String
+  name        String
+  email       String
+  phone       String
+  accessPin   String   @unique
+  amountPaid  Float
+  isEarlyBird Boolean  @default(false)
+  paymentRef  String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+
+  class  Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
+  device DeviceBinding?
+}
+
+model DeviceBinding {
+  id           String   @id @default(cuid())
+  enrollmentId String   @unique
+  ipAddress    String
+  userAgent    String   @default("")
+  registeredAt DateTime @default(now())
+
+  enrollment ClassEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+}
