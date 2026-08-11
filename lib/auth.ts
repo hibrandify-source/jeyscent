@@ -4,18 +4,18 @@ import { cookies } from "next/headers";
 import { getUserById } from "./db";
 import { UserType } from "./types";
 
-// Hard-fail in production if the secret is missing — silently falling back to
-// a known string would let anyone forge auth tokens. In dev we keep a
-// deterministic fallback so `next dev` works out of the box.
-const JWT_SECRET =
-  process.env.JWT_SECRET ||
-  (process.env.NODE_ENV === "production"
-    ? (() => {
-        throw new Error(
-          "JWT_SECRET environment variable is required in production"
-        );
-      })()
-    : "dev-only-fallback-secret");
+// Lazily resolve JWT_SECRET — we must NOT throw at module load time, otherwise
+// `next build`'s "Collecting page data" phase evaluates route modules, hits the
+// throw, and the build crashes even though the secret is only needed at
+// request time. By deferring to a function call, the build passes and the
+// error only surfaces when a token is actually signed/verified.
+function getJwtSecret(): string {
+  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("JWT_SECRET environment variable is required in production");
+  }
+  return "dev-only-fallback-secret";
+}
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
@@ -35,7 +35,7 @@ export function generateToken(user: {
 }): string {
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: "7d" }
   );
 }
@@ -44,7 +44,7 @@ export function verifyToken(
   token: string
 ): { id: string; email: string; role: string } | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as {
+    return jwt.verify(token, getJwtSecret()) as {
       id: string;
       email: string;
       role: string;
