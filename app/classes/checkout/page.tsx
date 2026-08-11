@@ -14,7 +14,10 @@ interface ClassInfo {
   price: number;
   earlyBirdPrice: number;
   earlyBirdMax: number;
-  earlyBirdUsed: number;
+  // API returns `earlyBRemaining` (computed server-side). `earlyBirdUsed` is
+  // intentionally withheld. We tolerate either field; `earlyBRemaining` wins.
+  earlyBRemaining?: number;
+  earlyBirdUsed?: number;
   episodeCount?: number;
 }
 
@@ -65,11 +68,17 @@ export default function ClassCheckoutPage() {
   }, [searchParams]);
 
   const effectiveClassId = classId || cls?.id || "";
-  const isEarlyBird = cls ? cls.earlyBirdUsed < cls.earlyBirdMax : false;
-  const amount = cls ? (isEarlyBird ? cls.earlyBirdPrice : cls.price) : 0;
+  // Prefer `earlyBRemaining` from the API; fall back to deriving from
+  // `earlyBirdUsed` for older/legacy responses (and the catalog list, which
+  // also withholds `earlyBirdUsed`).
   const earlyBirdsLeft = cls
-    ? Math.max(0, cls.earlyBirdMax - cls.earlyBirdUsed)
+    ? (cls.earlyBRemaining ?? Math.max(0, cls.earlyBirdMax - (cls.earlyBirdUsed ?? 0)))
     : 0;
+  // Early-bird is "active" while slots remain AND the class actually has a
+  // tier configured (earlyBirdMax > 0). When the admin disables early bird
+  // (earlyBirdMax = 0), earlyBirdsLeft is 0 and isEarlyBird is false.
+  const isEarlyBird = cls ? cls.earlyBirdMax > 0 && earlyBirdsLeft > 0 : false;
+  const amount = cls ? (isEarlyBird ? cls.earlyBirdPrice : cls.price) : 0;
 
   const handleUpdate = (field: string, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { createOrder, createUser, getUserByEmail } from "@/lib/db";
 import { hashPassword, generateToken } from "@/lib/auth";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 import {
   sendOrderConfirmation,
   sendAdminNotification,
@@ -20,10 +21,14 @@ function generatePassword(): string {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate-limit: 10 checkout submissions per minute per IP. Each creates DB
+  // rows, sends emails, and may create a user — throttling stops abuse.
+  const ip = clientIp(request);
+  const rl = rateLimit(`checkout:${ip}`, { limit: 10, windowMs: 60_000 });
+  if (!rl.ok) return tooManyRequests(rl.retryAfterMs, "Too many orders. Please slow down.");
+
   try {
     const body = await request.json();
-
-    console.log("[checkout] POST body:", JSON.stringify(body, null, 2));
 
     const {
       name,

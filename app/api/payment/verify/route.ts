@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
+  // Rate-limit: 20 verifications per minute per IP. Each call hits QorePay's
+  // GET /v1/purchases/:reference endpoint — throttling protects gateway quota.
+  const ip = clientIp(request);
+  const rl = rateLimit(`verify:${ip}`, { limit: 20, windowMs: 60_000 });
+  if (!rl.ok) return tooManyRequests(rl.retryAfterMs, "Too many verification attempts. Please slow down.");
+
   try {
     const { reference } = await request.json();
 
@@ -23,11 +30,6 @@ export async function POST(request: NextRequest) {
     );
 
     const verifyData = await verifyRes.json();
-
-    console.log(
-      "QorePay verification response:",
-      JSON.stringify(verifyData, null, 2)
-    );
 
     // QorePay returns: { data: { status: "SUCCESS", amount, currency, ... } }
     const isSuccessful =

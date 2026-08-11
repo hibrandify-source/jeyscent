@@ -3,6 +3,7 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { formatPrice } from "@/data/products";
+import ExpandableText from "@/components/ExpandableText";
 
 // ── /classes/[id] ───────────────────────────────────────────────────────────
 // Public detail page for a single class. Shows the cover image, description,
@@ -98,9 +99,11 @@ export default async function ClassDetailPage({
             </h1>
             <div className="luxury-divider mb-8" />
 
-            <p className="text-muted leading-relaxed mb-8 whitespace-pre-line">
-              {cls.description}
-            </p>
+            <ExpandableText
+              text={cls.description}
+              maxLength={320}
+              className="text-muted leading-relaxed mb-8"
+            />
 
             {/* What's included */}
             <div className="mb-10 grid grid-cols-1 gap-3">

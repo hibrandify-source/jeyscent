@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 
 // ── POST /api/classes/watch ───────────────────────────────────────────────────
 // Validates an access pin (+email as a soft second factor) and returns the
@@ -51,6 +52,13 @@ function normalizeUa(raw: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate-limit by IP — 30 watch attempts per minute. Pin brute-force is
+  // effectively infeasible (48-bit entropy), but this stops trivial flooding
+  // and abuse of the device-binding side effects.
+  const ip = clientIp(request);
+  const rl = rateLimit(`watch:${ip}`, { limit: 30, windowMs: 60_000 });
+  if (!rl.ok) return tooManyRequests(rl.retryAfterMs, "Too many access attempts. Please slow down.");
+
   try {
     let body: { pin?: string; email?: string };
     try {
@@ -113,17 +121,57 @@ export async function POST(request: NextRequest) {
 
     // ── Device-lock logic (device-based via User-Agent) ────────────────────
     if (!enrollment.device) {
-      // First time this pin is used — bind it.
-      await prisma.deviceBinding.create({
-        data: {
-          enrollmentId: enrollment.id,
-          ipAddress: ip,
-          userAgent,
-        },
-      });
-      console.log(
-        `[classes/watch] Bound enrollment ${enrollment.id} to UA="${uaFingerprint}" IP=${ip}`
-      );
+      // First time this pin is used — bind it. If two requests for the same
+      // pin race past this null-check, the loser's CREATE throws P2002 on the
+      // unique enrollmentId constraint — we re-fetch the winning binding and
+      // continue as normal (instead of falling through to a generic 500).
+      try {
+        await prisma.deviceBinding.create({
+          data: {
+            enrollmentId: enrollment.id,
+            ipAddress: ip,
+            userAgent,
+          },
+        });
+        console.log(
+          `[classes/watch] Bound enrollment ${enrollment.id} to UA="${uaFingerprint}" IP=${ip}`
+        );
+      } catch (createErr: unknown) {
+        const code =
+          (createErr as { code?: string })?.code ||
+          (createErr as { meta?: { code?: string } })?.meta?.code;
+        if (code !== "P2002") {
+          console.error("[classes/watch] Failed to bind device:", createErr);
+          return NextResponse.json(
+            { error: "Failed to authorize access" },
+            { status: 500 }
+          );
+        }
+        // Race lost — re-fetch the winning binding and re-check below.
+        const raced = await prisma.deviceBinding.findUnique({
+          where: { enrollmentId: enrollment.id },
+        });
+        if (!raced) {
+          // Should not happen, but bail safely.
+          return NextResponse.json(
+            { error: "Failed to authorize access" },
+            { status: 500 }
+          );
+        }
+        const racedUa = normalizeUa(raced.userAgent || "");
+        if (racedUa !== uaFingerprint) {
+          return NextResponse.json(
+            {
+              error:
+                "This access pin is registered to another device. Each pin works on only one device.",
+            },
+            { status: 403 }
+          );
+        }
+        console.log(
+          `[classes/watch] Race-lost create for enrollment ${enrollment.id}; matched winning binding`
+        );
+      }
     } else {
       const boundUa = normalizeUa(enrollment.device.userAgent || "");
       if (boundUa !== uaFingerprint) {

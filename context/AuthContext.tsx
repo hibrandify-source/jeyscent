@@ -57,7 +57,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: true };
       }
       return { success: false, error: data.error || "Login failed" };
-    } catch (err) { console.error ("Login fetch error:, err");
+    } catch (err) {
+      console.error("Login fetch error:", err);
       return { success: false, error: "Something went wrong" };
     }
   };

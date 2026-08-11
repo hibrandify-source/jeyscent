@@ -126,34 +126,69 @@ export async function POST(request: NextRequest) {
     // We bump earlyBirdUsed only when the pending row was marked early-bird
     // AND the class is still within its early-bird quota. This guards against
     // two students racing for the last slot — the increment is conditional.
+    // paymentRef has a UNIQUE constraint (partial index, NULLs allowed), so if
+    // two concurrent confirmations of the same reference race past the
+    // idempotency check above, the loser's CREATE throws P2002 — we catch it
+    // and treat the race as a successful idempotent confirmation.
     const isEarly = pending.isEarlyBird;
     const shouldBumpEarly = isEarly && pending.class.earlyBirdUsed < pending.class.earlyBirdMax;
 
-    const enrollment = await prisma.$transaction(async (tx) => {
-      const created = await tx.classEnrollment.create({
-        data: {
-          classId: pending.classId,
-          name: pending.name,
-          email: pending.email,
-          phone: pending.phone,
-          accessPin,
-          amountPaid: pending.amount,
-          isEarlyBird: shouldBumpEarly,
-          paymentRef: reference,
-          status: "active",
-        },
-      });
-
-      if (shouldBumpEarly) {
-        await tx.class.update({
-          where: { id: pending.classId },
-          data: { earlyBirdUsed: { increment: 1 } },
+    let enrollment;
+    try {
+      enrollment = await prisma.$transaction(async (tx) => {
+        const created = await tx.classEnrollment.create({
+          data: {
+            classId: pending.classId,
+            name: pending.name,
+            email: pending.email,
+            phone: pending.phone,
+            accessPin,
+            amountPaid: pending.amount,
+            isEarlyBird: shouldBumpEarly,
+            paymentRef: reference,
+            status: "active",
+          },
         });
-      }
 
-      await tx.pendingEnrollment.delete({ where: { id: pending.id } });
-      return created;
-    });
+        if (shouldBumpEarly) {
+          await tx.class.update({
+            where: { id: pending.classId },
+            data: { earlyBirdUsed: { increment: 1 } },
+          });
+        }
+
+        await tx.pendingEnrollment.delete({ where: { id: pending.id } });
+        return created;
+      });
+    } catch (txErr: unknown) {
+      const code =
+        (txErr as { code?: string })?.code ||
+        (txErr as { meta?: { code?: string } })?.meta?.code;
+      if (code === "P2002") {
+        // Concurrent confirmation won the race — fetch the winning enrollment
+        // and treat this request as an idempotent success.
+        console.log("[classes/confirm] Concurrent confirm race for reference", reference, "— returning existing enrollment");
+        const winner = await prisma.classEnrollment.findUnique({
+          where: { paymentRef: reference },
+          select: { id: true, accessPin: true, email: true },
+        });
+        if (winner) {
+          return NextResponse.json({
+            success: true,
+            confirmed: winner.accessPin,
+            email: winner.email,
+            className: pending.class.title,
+          });
+        }
+        // P2002 on something other than paymentRef (e.g. accessPin collision)
+        // fall through to the generic 500.
+      }
+      console.error("[classes/confirm] Transaction failed:", txErr);
+      return NextResponse.json(
+        { error: "Failed to confirm enrollment. Please contact support." },
+        { status: 500 }
+      );
+    }
 
     // ── Auto-create JeyScent account if none exists for this email ────────
     // Every student who pays gets a proper user account automatically. The

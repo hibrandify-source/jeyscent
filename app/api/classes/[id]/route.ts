@@ -46,12 +46,12 @@ export async function GET(
       return NextResponse.json({ error: "Class not found" }, { status: 404 });
     }
 
-    const { pdfUrl, ...rest } = cls;
+    const { pdfUrl, earlyBirdUsed, ...rest } = cls;
     return NextResponse.json({
       class: {
         ...rest,
         episodeCount: cls.episodes.length,
-        earlyBRemaining: Math.max(0, cls.earlyBirdMax - cls.earlyBirdUsed),
+        earlyBRemaining: Math.max(0, cls.earlyBirdMax - earlyBirdUsed),
         hasPdf: !!pdfUrl,
       },
     });

@@ -174,7 +174,9 @@ model ClassEnrollment {
   accessPin   String   @unique
   amountPaid  Float
   isEarlyBird Boolean  @default(false)
-  paymentRef  String?
+  // Unique so concurrent confirmations of the same QorePay reference can't
+  // double-create enrollments (and double-increment earlyBirdUsed).
+  paymentRef  String?  @unique
   status      String   @default("active")
   createdAt   DateTime @default(now())
 

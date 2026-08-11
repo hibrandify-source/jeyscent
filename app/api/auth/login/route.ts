@@ -2,13 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserByEmail } from "@/lib/db";
 import { verifyPassword, generateToken } from "@/lib/auth";
 import { cookies } from "next/headers";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
+  // Rate-limit by IP — 10 attempts per minute. Combined with the generic
+  // "Invalid email or password" error below (no email enumeration), this
+  // makes brute-force attacks impractical.
+  const ip = clientIp(request);
+  const rl = rateLimit(`login:${ip}`, { limit: 10, windowMs: 60_000 });
+  if (!rl.ok) return tooManyRequests(rl.retryAfterMs, "Too many login attempts. Please try again shortly.");
+
   try {
     const body = await request.json();
     const { email, password } = body;
-
-    console.log("🔑 Login attempt for:", email);
 
     if (!email || !password) {
       return NextResponse.json(
@@ -20,18 +26,14 @@ export async function POST(request: NextRequest) {
     const user = await getUserByEmail(email);
 
     if (!user) {
-      console.log("❌ User not found:", email);
+      // Don't log which email failed — that's PII and aids enumeration.
       return NextResponse.json(
         { error: "Invalid email or password" },
         { status: 401 }
       );
     }
 
-    console.log("✅ User found:", user.email, "Role:", user.role);
-
     const isValid = await verifyPassword(password, user.password);
-
-    console.log("🔐 Password valid:", isValid);
 
     if (!isValid) {
       return NextResponse.json(
@@ -54,8 +56,6 @@ export async function POST(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 7,
       path: "/",
     });
-
-    console.log("✅ Login successful for:", user.email);
 
     return NextResponse.json({
       user: {

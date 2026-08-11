@@ -40,11 +40,11 @@ export async function GET(request: NextRequest) {
     });
 
     const withCounts = classes.map((c) => {
-      const { pdfUrl, ...rest } = c;
+      const { pdfUrl, earlyBirdUsed, ...rest } = c;
       return {
         ...rest,
         episodeCount: c.episodes.length,
-        earlyBRemaining: Math.max(0, c.earlyBirdMax - c.earlyBirdUsed),
+        earlyBRemaining: Math.max(0, c.earlyBirdMax - earlyBirdUsed),
         hasPdf: !!pdfUrl,
       };
     });

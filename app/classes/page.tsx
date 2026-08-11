@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { prisma } from "@/lib/prisma";
 import { formatPrice } from "@/data/products";
+import ExpandableText from "@/components/ExpandableText";
 
 // ── /classes ────────────────────────────────────────────────────────────────
 // Public catalog. Lists every published class as a card. Click a card → the
@@ -129,9 +130,13 @@ export default async function ClassesPage() {
                     </p>
 
                     {c.description && (
-                      <p className="text-sm text-muted leading-relaxed mb-4 line-clamp-3 whitespace-pre-line">
-                        {c.description}
-                      </p>
+                      <div className="mb-4">
+                        <ExpandableText
+                          text={c.description}
+                          maxLength={140}
+                          className="text-sm text-muted leading-relaxed"
+                        />
+                      </div>
                     )}
 
                     <div className="mt-auto flex items-baseline justify-between mb-4">

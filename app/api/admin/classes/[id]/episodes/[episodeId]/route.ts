@@ -20,7 +20,7 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { id, episodeId } = await params;
+    const { episodeId } = await params;
     let body: Record<string, unknown>;
     try {
       body = await request.json();
@@ -59,7 +59,7 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { id: _id, episodeId } = await params;
+    const { episodeId } = await params;
     await prisma.classEpisode.delete({ where: { id: episodeId } });
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -3,6 +3,7 @@ import { getUserByEmail } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { sendPasswordResetEmail } from "@/lib/email";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 
 function generateTempPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#";
@@ -14,6 +15,14 @@ function generateTempPassword(): string {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate-limit by IP — 3 requests per minute. Each request triggers a DB write
+  // and an outgoing email, so stricter than login/register. Throttle is per
+  // IP (not per email) so an attacker can't enumerate emails by sending
+  // resets to many addresses from the same IP.
+  const ip = clientIp(request);
+  const rl = rateLimit(`forgot:${ip}`, { limit: 3, windowMs: 60_000 });
+  if (!rl.ok) return tooManyRequests(rl.retryAfterMs, "Too many reset requests. Please try again shortly.");
+
   try {
     const { email } = await request.json();
 

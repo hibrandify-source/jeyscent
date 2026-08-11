@@ -1,12 +1,15 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma as prismaClient } from "./prisma";
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+// Re-export the shared PrismaClient singleton so existing `import { prisma }
+// from "@/lib/db"` call sites keep working — they now transparently share
+// the same client as `import { prisma } from "@/lib/prisma"`.
+export const prisma = prismaClient;
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// NOTE: PrismaClient is intentionally imported once (lib/prisma.ts) and shared.
+// Previously this file created its own PrismaClient, which in production
+// (where lib/prisma.ts skips the global cache) meant two competing clients
+// against the same connection pool — wasteful and fragile. Importing the
+// shared singleton fixes that.
 
 // ============ USER HELPERS ============
 

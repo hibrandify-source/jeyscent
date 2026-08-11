@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef } from "react";
-import CloudinaryImage from "@/components/CloudinaryImage";
 import { cldResize } from "@/lib/cloudinary";
 import Link from "next/link";
 import { Product } from "@/lib/types";
@@ -80,6 +79,10 @@ export default function ProductCard({
               key={i}
               src={cldResize(img, 600, 800)}
               alt={product.name}
+              // First image is eager when `priority` is set (home-page LCP);
+              // other carousel frames always lazy-load.
+              loading={priority && i === 0 ? "eager" : "lazy"}
+              fetchPriority={priority && i === 0 ? "high" : "auto"}
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${i === current ? "opacity-100" : "opacity-0"}`}
             />
           ))}

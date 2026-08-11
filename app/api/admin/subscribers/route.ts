@@ -1,26 +1,18 @@
 // app/api/admin/subscribers/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyToken } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 
-// FIXED: decoded.userId → decoded.id, 'ADMIN' → 'admin'
-async function isAdmin(request: NextRequest) {
-  const token = request.cookies.get("token")?.value;
-  if (!token) return false;
-
-  const decoded = verifyToken(token);
-  if (!decoded) return false;
-
-  const user = await prisma.user.findUnique({
-    where: { id: decoded.id },
-  });
-
-  return user?.role === "admin";
+// Reuse the canonical auth helper — it re-loads the user from the DB on every
+// call, so deleted/deactivated admins can't ride a stale JWT to victory.
+async function isAdmin() {
+  const user = await getCurrentUser();
+  return !!user && user.role === "admin";
 }
 
 // GET all subscribers
 export async function GET(request: NextRequest) {
-  if (!(await isAdmin(request))) {
+  if (!(await isAdmin())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -58,7 +50,7 @@ export async function GET(request: NextRequest) {
 
 // DELETE a subscriber (or deactivate)
 export async function DELETE(request: NextRequest) {
-  if (!(await isAdmin(request))) {
+  if (!(await isAdmin())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -1,30 +1,26 @@
 // app/api/admin/subscribers/notify/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { verifyToken } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
+import { rateLimit, tooManyRequests } from "@/lib/rateLimit";
 import nodemailer from "nodemailer";
 
-const prisma = new PrismaClient();
-
-// FIXED: decoded.userId → decoded.id, 'ADMIN' → 'admin'
-async function isAdmin(request: NextRequest) {
-  const token = request.cookies.get("token")?.value;
-  if (!token) return false;
-
-  const decoded = verifyToken(token);
-  if (!decoded) return false;
-
-  const user = await prisma.user.findUnique({
-    where: { id: decoded.id },
-  });
-
-  return user?.role === "admin";
-}
+// NOTE: previously instantiated `new PrismaClient()` at module load — that
+// spawned an extra client per request and competed with the shared singleton
+// for the connection pool. Now uses the shared singleton from lib/prisma.
 
 export async function POST(request: NextRequest) {
-  if (!(await isAdmin(request))) {
+  const adm = await getCurrentUser();
+  if (!adm || adm.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // Rate-limit by admin id — max 3 broadcasts per hour per admin. Each
+  // broadcast can fire thousands of Gmail sends (which have their own daily
+  // quota), so this guards against a compromised admin cookie emptying the
+  // sender reputation or quota in one go.
+  const rl = rateLimit(`notify:${adm.id}`, { limit: 3, windowMs: 3_600_000 });
+  if (!rl.ok) return tooManyRequests(rl.retryAfterMs, "Too many broadcasts. Please wait before sending another.");
 
   try {
     const { subject, type, title, message, link } = await request.json();

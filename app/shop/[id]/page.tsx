@@ -31,6 +31,11 @@ export default function ProductDetailPage() {
   const [activeImage, setActiveImage] = useState(0);
   const [added, setAdded] = useState(false);
 
+  // Touch-swipe refs for the image carousel. Declared here (before the
+  // !product early return) so hook order is identical across renders.
+  const touchStartX = useRef(0);
+  const swiped = useRef(false);
+
   useEffect(() => {
     if (product) {
       viewContent({
@@ -74,9 +79,6 @@ export default function ProductDetailPage() {
   const allDetailImages = [currentImage, ...currentGallery];
   const detailImages = [...new Set(allDetailImages)];
   const hasMultipleDetail = detailImages.length > 1;
-
-  const touchStartX = useRef(0);
-  const swiped = useRef(false);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;

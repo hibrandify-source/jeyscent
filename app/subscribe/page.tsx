@@ -167,6 +167,7 @@ export default function SubscribePage() {
     if (basket.length === 0) return;
 
     // ── Generate a unique session ID for this subscription attempt ──────────
+    // eslint-disable-next-line react-hooks/purity -- runs on user click, not during render
     const sessionId = `sub_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
     localStorage.setItem(
@@ -179,6 +180,7 @@ export default function SubscribePage() {
         frequencyMonths: FREQUENCY_MONTHS,
         totalPrice: basketTotal,
         totalUnits: basketTotalUnits,
+        // eslint-disable-next-line react-hooks/purity -- runs on user click, not during render
         savedAt: Date.now(),
       })
     );

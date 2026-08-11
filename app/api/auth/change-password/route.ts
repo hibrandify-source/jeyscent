@@ -1,22 +1,22 @@
 // app/api/auth/change-password/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import { sendPasswordChangedEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, tooManyRequests } from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
   try {
-    const token = request.cookies.get("token")?.value;
-
-    if (!token) {
+    const user = await getCurrentUser();
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const decoded = verifyToken(token);
-    if (!decoded) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-    }
+    // Rate-limit: 5 password changes per hour per user — slows brute-force
+    // against currentPassword if an attacker has a session.
+    const rl = rateLimit(`chpw:${user.id}`, { limit: 5, windowMs: 3_600_000 });
+    if (!rl.ok) return tooManyRequests(rl.retryAfterMs, "Too many password change attempts. Please wait a while.");
 
     let body;
     try {
@@ -44,17 +44,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // FIXED: was decoded.userId — but verifyToken returns { id, email, role }
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
+    // Re-fetch full user record (includes password hash)
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
     });
 
-    if (!user) {
+    if (!dbUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // Verify current password
-    const isValid = await bcrypt.compare(currentPassword, user.password);
+    const isValid = await bcrypt.compare(currentPassword, dbUser.password);
     if (!isValid) {
       return NextResponse.json(
         { error: "Current password is incorrect" },
@@ -66,13 +66,13 @@ export async function POST(request: NextRequest) {
     const hashedPassword = await bcrypt.hash(newPassword, 12);
 
     await prisma.user.update({
-      where: { id: user.id },
+      where: { id: dbUser.id },
       data: { password: hashedPassword },
     });
 
     // Send password changed email notification
     try {
-      await sendPasswordChangedEmail(user.email, user.name || "Valued Customer");
+      await sendPasswordChangedEmail(dbUser.email, dbUser.name || "Valued Customer");
     } catch (emailError) {
       console.error("Failed to send password changed email:", emailError);
     }

@@ -2,7 +2,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 
 interface Subscriber {
   id: string;
@@ -50,6 +49,7 @@ export default function AdminSubscribersPage() {
 
   useEffect(() => {
     fetchSubscribers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch when filter changes; fetchSubscribers closes over filter
   }, [filter]);
 
   const handleDeactivate = async (id: string) => {

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser }           from "@/lib/auth";
+import { rateLimit, tooManyRequests } from "@/lib/rateLimit";
 
 
 export async function POST(request: NextRequest) {
@@ -14,6 +15,10 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
+
+    // Rate-limit: 5 subscription creations per minute per user.
+    const rl = rateLimit(`subcreate:${user.id}`, { limit: 5, windowMs: 60_000 });
+    if (!rl.ok) return tooManyRequests(rl.retryAfterMs, "Too many subscription attempts. Please slow down.");
 
     let body;
     try {

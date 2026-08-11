@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { rateLimit, tooManyRequests } from "@/lib/rateLimit";
 
 export async function POST() {
   try {
@@ -9,6 +10,11 @@ export async function POST() {
     if (!user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    // Rate-limit: 10 confirmations per hour per user — prevents Brute-forcing
+    // the QorePay verify loop for different pending references.
+    const rl = rateLimit(`subconfirm:${user.id}`, { limit: 10, windowMs: 3_600_000 });
+    if (!rl.ok) return tooManyRequests(rl.retryAfterMs, "Too many confirmation attempts. Please wait a while.");
 
     // ── Find most recent pending subscription for this user ───────────────
     const pending = await prisma.pendingSubscription.findFirst({
@@ -35,8 +41,6 @@ export async function POST() {
         }
       );
       const verifyData = await verifyRes.json();
-
-      console.log("[confirm] QorePay verify response:", JSON.stringify(verifyData, null, 2));
 
       if (!verifyRes.ok || verifyData.data?.status !== "SUCCESS") {
         return NextResponse.json(
@@ -124,8 +128,6 @@ export async function POST() {
 
     // ── Clean up pending record ───────────────────────────────────────────
     await prisma.pendingSubscription.delete({ where: { id: pending.id } });
-
-    console.log("[confirm] Subscription confirmed successfully for user:", user.id);
 
     return NextResponse.json({ success: true });
   } catch (error) {

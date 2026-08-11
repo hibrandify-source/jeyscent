@@ -45,6 +45,7 @@ export default function AdminSubscriptionsPage() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch when filter changes; fetchSubscriptions closes over filter
   useEffect(() => { fetchSubscriptions(); }, [filter]);
 
   const handleCancel = async (id: string) => {

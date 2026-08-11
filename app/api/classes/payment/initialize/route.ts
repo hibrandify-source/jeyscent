@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 
 // ── POST /api/classes/payment/initialize ────────────────────────────────────
 // Starts a QorePay checkout for a class seat. Saves a PendingEnrollment row
@@ -10,6 +11,13 @@ import { prisma } from "@/lib/prisma";
 //   if class.earlyBirdUsed < class.earlyBirdMax  -> earlyBirdPrice
 //   else                                          -> price
 export async function POST(request: NextRequest) {
+  // Rate-limit by IP — 10 initializations per minute. Each call hits
+  // QorePay's API and creates a PendingEnrollment row; this throttle stops
+  // attackers from exhausting the brand's QorePay quota.
+  const ip = clientIp(request);
+  const rl = rateLimit(`classpay:${ip}`, { limit: 10, windowMs: 60_000 });
+  if (!rl.ok) return tooManyRequests(rl.retryAfterMs, "Too many checkout attempts. Please slow down.");
+
   try {
     let body: { classId?: string; name?: string; email?: string; phone?: string };
     try {

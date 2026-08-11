@@ -30,6 +30,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem("jeyscent-cart");
     if (saved) {
       try {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating from localStorage; runs once on mount
         setItems(JSON.parse(saved));
       } catch {
         setItems([]);

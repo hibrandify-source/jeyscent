@@ -6,10 +6,6 @@ import Link from "next/link";
 function SubscribeSuccessContent() {
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
 
-  useEffect(() => {
-    verifyAndCreate();
-  }, []);
-
   const verifyAndCreate = async () => {
     try {
       const res = await fetch("/api/subscriptions/confirm", {
@@ -28,6 +24,11 @@ function SubscribeSuccessContent() {
       setStatus("error");
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot fetch on mount; status set from async response
+    verifyAndCreate();
+  }, []);
 
   if (status === "loading") return (
     <div className="pt-40 text-center">

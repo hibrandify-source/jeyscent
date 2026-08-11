@@ -2,8 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { createUser, getUserByEmail } from "@/lib/db";
 import { hashPassword, generateToken } from "@/lib/auth";
 import { cookies } from "next/headers";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
+  // Rate-limit by IP — 5 new accounts per minute per IP. Prevents automated
+  // mass account creation / spam signups.
+  const ip = clientIp(request);
+  const rl = rateLimit(`register:${ip}`, { limit: 5, windowMs: 60_000 });
+  if (!rl.ok) return tooManyRequests(rl.retryAfterMs, "Too many signups from this network. Please try again shortly.");
+
   try {
     const { name, email, password } = await request.json();
 

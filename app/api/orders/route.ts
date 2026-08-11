@@ -9,6 +9,7 @@ import {
   sendOrderConfirmation,
   sendAdminNotification,
 } from "@/lib/email";
+import { rateLimit, tooManyRequests } from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,6 +20,10 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
+
+    // Rate-limit: 10 orders per minute per user.
+    const rl = rateLimit(`orders:${user.id}`, { limit: 10, windowMs: 60_000 });
+    if (!rl.ok) return tooManyRequests(rl.retryAfterMs, "Too many orders. Please slow down.");
 
     const body = await request.json();
     const {

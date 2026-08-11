@@ -1,10 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
+  // Rate-limit by IP — 10 initializations per minute. Each call hits
+  // QorePay's API (which counts against the merchant quota); throttling
+  // per-IP stops attackers from suffocating the gateway.
+  const ip = clientIp(request);
+  const rl = rateLimit(`pay:${ip}`, { limit: 10, windowMs: 60_000 });
+  if (!rl.ok) return tooManyRequests(rl.retryAfterMs, "Too many checkout attempts. Please slow down.");
+
   try {
     const { amount, email, name, metadata } = await request.json();
+
+    // ── Input validation ─────────────────────────────────────────────────────
+    if (typeof amount !== "number" || isNaN(amount) || amount <= 0) {
+      return NextResponse.json(
+        { error: "Invalid amount" },
+        { status: 400 }
+      );
+    }
+    if (!email || typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json(
+        { error: "A valid email is required" },
+        { status: 400 }
+      );
+    }
 
     const baseUrl =
       process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";

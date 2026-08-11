@@ -4,7 +4,18 @@ import { cookies } from "next/headers";
 import { getUserById } from "./db";
 import { UserType } from "./types";
 
-const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret";
+// Hard-fail in production if the secret is missing — silently falling back to
+// a known string would let anyone forge auth tokens. In dev we keep a
+// deterministic fallback so `next dev` works out of the box.
+const JWT_SECRET =
+  process.env.JWT_SECRET ||
+  (process.env.NODE_ENV === "production"
+    ? (() => {
+        throw new Error(
+          "JWT_SECRET environment variable is required in production"
+        );
+      })()
+    : "dev-only-fallback-secret");
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
