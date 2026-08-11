@@ -28,7 +28,7 @@ model Order {
   items           OrderItem[]
   total           Float
   status          String      @default("pending")
-  paymentRef      String?
+  paymentRef      String?     @unique
   shippingAddress String
   shippingCity    String
   shippingState   String

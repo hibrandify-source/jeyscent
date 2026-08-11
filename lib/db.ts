@@ -40,7 +40,7 @@ export async function getUserById(id: string) {
 // ============ ORDER HELPERS ============
 
 export async function createOrder(data: {
-  userId: string;
+  userId: string | null;
   total: number;
   paymentRef?: string;
   shippingAddress: string;

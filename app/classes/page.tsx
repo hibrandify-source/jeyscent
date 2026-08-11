@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { formatPrice } from "@/data/products";
 import ExpandableText from "@/components/ExpandableText";
 
+// Avoid prerendering at build time (DB may not be reachable during Vercel
+// build's static page collection). Always server-render on demand.
+export const dynamic = "force-dynamic";
+
 // ── /classes ────────────────────────────────────────────────────────────────
 // Public catalog. Lists every published class as a card. Click a card → the
 // per-class detail page at /classes/[id] (module list, full description,

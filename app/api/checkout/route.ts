@@ -9,7 +9,8 @@ import {
   sendWelcomeEmail,
 } from "@/lib/email";
 import { cookies } from "next/headers";
-import { prisma } from "@/lib/db"; // ✅ use the singleton — no new PrismaClient() here
+import { prisma } from "@/lib/db";
+import { products, getSalePrice } from "@/data/products";
 
 function generatePassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -58,7 +59,6 @@ export async function POST(request: NextRequest) {
     if (!items?.length)               missing.push("items");
 
     if (missing.length > 0) {
-      console.error("[checkout] Missing required fields:", missing);
       return NextResponse.json(
         { error: `Missing required fields: ${missing.join(", ")}` },
         { status: 400 }
@@ -67,9 +67,60 @@ export async function POST(request: NextRequest) {
 
     // ── Address validation only for delivery orders ────────────────────────
     if (!isPickup && (!shippingAddress || !shippingCity || !shippingState)) {
-      console.error("[checkout] Missing delivery address fields");
       return NextResponse.json(
         { error: "Missing required delivery address fields" },
+        { status: 400 }
+      );
+    }
+
+    // ── Server-side price validation ──────────────────────────────────────
+    // Don't trust client-sent prices — recompute from the source of truth
+    // (data/products.ts) and reject if anything doesn't match exactly.
+    let computedItemsTotal = 0;
+    for (const item of items) {
+      if (typeof item.productId !== "string" || !item.productId) {
+        return NextResponse.json({ error: "Invalid product in cart" }, { status: 400 });
+      }
+      if (typeof item.quantity !== "number" || item.quantity < 1 || !Number.isInteger(item.quantity)) {
+        return NextResponse.json({ error: "Invalid quantity in cart" }, { status: 400 });
+      }
+      const product = products.find((p) => p.id === item.productId);
+      if (!product) {
+        return NextResponse.json(
+          { error: `Invalid product: ${item.productId}` },
+          { status: 400 }
+        );
+      }
+      const sizeInfo = product.sizes.find((s) => s.size === item.size);
+      if (!sizeInfo) {
+        return NextResponse.json(
+          { error: `Invalid size for ${product.name}: ${item.size}` },
+          { status: 400 }
+        );
+      }
+      if (!sizeInfo.inStock) {
+        return NextResponse.json(
+          { error: `${product.name} (${item.size}) is out of stock` },
+          { status: 400 }
+        );
+      }
+      const expectedUnitPrice = getSalePrice(sizeInfo.price);
+      if (item.price !== expectedUnitPrice) {
+        return NextResponse.json(
+          { error: "Price mismatch — please refresh the page and try again" },
+          { status: 400 }
+        );
+      }
+      computedItemsTotal += expectedUnitPrice * item.quantity;
+    }
+
+    // Verify that total isn't less than the computed items total + shipping.
+    // (total should equal computedItemsTotal + shippingFee, but we allow
+    // the client to pass a higher total e.g. for rounding — just not lower.)
+    const expectedMinTotal = computedItemsTotal + (typeof shippingFee === "number" ? shippingFee : 0);
+    if (typeof total !== "number" || total < expectedMinTotal) {
+      return NextResponse.json(
+        { error: "Total mismatch — please refresh the page and try again" },
         { status: 400 }
       );
     }
@@ -79,14 +130,13 @@ export async function POST(request: NextRequest) {
     const resolvedCity    = isPickup ? "N/A" : shippingCity;
     const resolvedState   = isPickup ? "N/A" : shippingState;
 
-    // ── Duplicate order guard ──────────────────────────────────────────────
+    // ── Duplicate order guard (fast-path) ──────────────────────────────────
     if (paymentRef) {
       const existingOrder = await prisma.order.findFirst({
         where: { paymentRef },
       });
 
       if (existingOrder) {
-        console.log("[checkout] Duplicate paymentRef — returning existing order:", existingOrder.id);
         return NextResponse.json({
           orderId: existingOrder.id,
           newAccount: false,
@@ -131,30 +181,45 @@ export async function POST(request: NextRequest) {
           maxAge: 60 * 60 * 24 * 7,
           path: "/",
         });
-      } else {
-        // Guest checkout — create silent account
-        tempPassword = generatePassword();
-        const hashedPw = await hashPassword(tempPassword);
-        const newUser = await createUser(name, email, hashedPw);
-        userId = newUser.id;
-        // newAccount stays false — no welcome email sent
       }
+      // Guest checkout: userId stays null — no silent account is created.
+      // The order is still tracked by email and phone, and the customer
+      // can always create an account later if they want to track orders.
     }
 
     // ── Create the order ───────────────────────────────────────────────────
-    const orderId = await createOrder({
-      userId,
-      total,
-      paymentRef,
-      shippingAddress: resolvedAddress,
-      shippingCity: resolvedCity,
-      shippingState: resolvedState,
-      phone,
-      email,
-      items,
-    });
-
-    console.log("[checkout] Order created:", orderId);
+    let orderId: string;
+    try {
+      orderId = await createOrder({
+        userId,
+        total,
+        paymentRef,
+        shippingAddress: resolvedAddress,
+        shippingCity: resolvedCity,
+        shippingState: resolvedState,
+        phone,
+        email,
+        items,
+      });
+    } catch (createErr: unknown) {
+      // P2002 = unique constraint violation on paymentRef — a concurrent
+      // request already created the order for this payment reference.
+      // Re-fetch the winning order and return it idempotently.
+      if (
+        typeof createErr === "object" && createErr !== null &&
+        "code" in createErr && (createErr as { code: string }).code === "P2002"
+      ) {
+        const existingOrder = await prisma.order.findFirst({ where: { paymentRef } });
+        if (existingOrder) {
+          return NextResponse.json({
+            orderId: existingOrder.id,
+            newAccount: false,
+            message: "Order already exists",
+          });
+        }
+      }
+      throw createErr;
+    }
 
     // ── Emails ─────────────────────────────────────────────────────────────
     const displayAddress = isPickup
