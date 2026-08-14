@@ -11,23 +11,22 @@ import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 //   • kind === "video" -> { authorized, kind, className, episodes:[{...}], pdfUrl? }
 //   • kind === "pdf"   -> { authorized, kind, className, pdfUrl }
 //
-// Device-lock behavior (IP-based, with UA as secondary signal):
+// Device-lock behavior (UA-based):
+//   The User-Agent string is the sole device identity. This is what makes a pin
+//   work on exactly one physical device: a phone and a laptop are different UAs
+//   even when they sit on the same WiFi (same IP), so a pin activated on mobile
+//   cannot be reused on a laptop — the user's stated requirement. A device that
+//   roams networks (WiFi -> LTE) keeps the same UA and stays unlocked.
 //   • No binding exists: bind IP + UA, return content.
-//   • Binding exists, IP matches -> return content. (If the UA changed — e.g.
-//     the user switched browsers on the same device — we silently update the
-//     stored UA. IP is the stable identity; the same IP is the same device,
-//     regardless of which browser or UA string is in use.)
-//   • Binding exists, IP differs but UA matches -> return content. (The user
-//     took the same physical device onto a new network — carrier NAT rotation,
-//     Wi-Fi, mobile data, router reboot, etc. — we silently re-bind to the new
-//     IP so future attempts compare against it.)
-//   • Binding exists, BOTH IP and UA differ -> 403. One device, ever.
+//   • Binding exists, UA matches (after normalization) -> return content. The
+//     IP is silently updated in case the device moved networks; IP never gates
+//     access on its own.
+//   • Binding exists, UA differs -> 403. A different browser/device, period.
 //
-// IP source: `x-forwarded-for` first entry (Vercel/Neon pass it through),
-// falling back to `request.ip`. We deliberately strip the port if present.
-// UA source: the `user-agent` request header. UA is normalized (minor browser
-// version bumps in the same browser still match because the UA prefix
-// (browser family, OS family, device family) is stable across point releases.
+// IP source: `x-forwarded-for` first entry (Vercel passes it through),
+// falling back to `request.ip`. Stripped of port. Used for logging only.
+// UA source: the `user-agent` request header, normalized so same-browser minor
+// version bumps (and minor OS point releases) don't trip the lock.
 
 function getClientIp(request: NextRequest): string {
   const xff = request.headers.get("x-forwarded-for");
@@ -163,9 +162,8 @@ export async function POST(request: NextRequest) {
           );
         }
         const racedUa = normalizeUa(raced.userAgent || "");
-        // Winning binding created by a different browser on a different IP:
-        // that's a genuinely different device.
-        if (raced.ipAddress !== ip && racedUa !== uaFingerprint) {
+        // Winning binding was created from a different device (different UA).
+        if (racedUa !== uaFingerprint) {
           return NextResponse.json(
             {
               error:
@@ -175,31 +173,29 @@ export async function POST(request: NextRequest) {
           );
         }
         console.log(
-          `[classes/watch] Race-lost create for enrollment ${enrollment.id}; matched winning binding (IP=${ip}, UA=${uaFingerprint})`
+          `[classes/watch] Race-lost create for enrollment ${enrollment.id}; matched winning binding (UA=${uaFingerprint})`
         );
       }
     } else {
-      // IP is the stable identity for a device. Same IP = same device,
-      // regardless of which browser / UA string is in use.
+      // UA is the sole device identity. Same UA = same device, regardless of
+      // IP — a phone on LTE and that same phone on WiFi are one device, while a
+      // laptop on the same WiFi is a different UA and stays locked out.
+      const boundUa = normalizeUa(enrollment.device.userAgent || "");
+      if (boundUa !== uaFingerprint) {
+        console.warn(
+          `[classes/watch] Rejected pin ${pin}: bound UA="${boundUa}", requested UA="${uaFingerprint}"`
+        );
+        return NextResponse.json(
+          {
+            error:
+              "This access pin is registered to another device. Each pin works on only one device.",
+          },
+          { status: 403 }
+        );
+      }
+      // Same device. If the IP drifted (device roamed networks), silently
+      // update the stored IP for logging/tracking — it never gates access.
       if (enrollment.device.ipAddress !== ip) {
-        // IP changed — check whether the UA still matches (same physical
-        // device that just moved networks: carrier NAT rotation, Wi-Fi →
-        // mobile data, router reboot, etc.).
-        const boundUa = normalizeUa(enrollment.device.userAgent || "");
-        if (boundUa !== uaFingerprint) {
-          // IP changed AND UA differs: genuinely different device.
-          console.warn(
-            `[classes/watch] Rejected pin ${pin}: bound IP="${enrollment.device.ipAddress}", requested IP="${ip}", UA mismatch`
-          );
-          return NextResponse.json(
-            {
-              error:
-                "This access pin is registered to another device. Each pin works on only one device.",
-            },
-            { status: 403 }
-          );
-        }
-        // Same UA, new IP = same device, IP drifted. Silently re-bind.
         await prisma.deviceBinding.update({
           where: { id: enrollment.device.id },
           data: { ipAddress: ip },
@@ -208,17 +204,16 @@ export async function POST(request: NextRequest) {
           `[classes/watch] Same device, new IP for enrollment ${enrollment.id}: ${enrollment.device.ipAddress} -> ${ip}`
         );
       } else {
-        // Same IP = same device. If the UA changed (different browser on the
-        // same device), silently update the stored UA so future UA drifts on
-        // other devices aren't falsely accepted.
-        const boundUa = normalizeUa(enrollment.device.userAgent || "");
-        if (boundUa !== uaFingerprint) {
+        // Same device, same IP. If the UA changed (different browser on the
+        // same device), silently update the stored UA so the new browser on
+        // this device remains authorized too.
+        if (userAgentRaw !== (enrollment.device.userAgent || "")) {
           await prisma.deviceBinding.update({
             where: { id: enrollment.device.id },
             data: { userAgent: userAgent },
           });
           console.log(
-            `[classes/watch] Same IP, different UA for enrollment ${enrollment.id}: updated UA`
+            `[classes/watch] Same UA, updated stored UA for enrollment ${enrollment.id}`
           );
         }
       }

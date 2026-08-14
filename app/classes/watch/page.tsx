@@ -167,12 +167,18 @@ export default function ClassWatchPage() {
                               allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                               title={ep.title}
                             />
-                            {/* Block clicks on Google's top-right chrome. ~10%
-                               of width/height (top-right) keeps the play button
-                               and timeline fully usable. */}
+                            {/* Block clicks on Google's top-right chrome (logo /
+                                pop-out) in desktop browsers so the student can't
+                                escape to drive.google.com. On mobile the Drive
+                                preview lays its UI out differently and this
+                                overlay would occlude visible video, so it is
+                                only applied on viewports >= 1024px (tailored
+                                to where the iframe sits on the desktop page).
+                                ~12% × 16% keeps Google's top-right controls
+                                covered without touching the play button. */}
                             <div
                               aria-hidden="true"
-                              className="absolute top-0 right-0 w-[14%] h-[18%] bg-transparent"
+                              className="absolute top-0 right-0 w-[12%] h-[16%] bg-transparent hidden lg:block"
                               style={{ pointerEvents: "auto" }}
                             />
                           </>
