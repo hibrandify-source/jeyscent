@@ -6,6 +6,28 @@ import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 import { getClientIp, normalizeUa } from "@/lib/device";
 import { getJwtSecret } from "@/lib/auth";
 import { isDriveUrl } from "@/lib/drive";
+import { presignGet } from "@/lib/r2";
+
+// Resolve a stored asset reference to the URL the browser should actually
+// fetch. Three flavors:
+//   • Drive link        -> our streaming proxy (hides the raw Drive URL/file id)
+//   • No scheme (R2 key) -> presigned R2 GET URL (bucket is private; a bare
+//                           key is 403 without a signature). 7-day expiry so a
+//                           student's device keeps playing without re-entering
+//                           their pin every day.
+//   • Any other URL     -> pass through unchanged
+async function deliveryUrl(url: string, streamPath: string): Promise<string> {
+  if (isDriveUrl(url)) return streamPath;
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) {
+    try {
+      return await presignGet(url, 60 * 60 * 24 * 7);
+    } catch (err) {
+      console.error("[classes/watch] Failed to presign R2 key:", url, err);
+      return url;
+    }
+  }
+  return url;
+}
 
 // ── POST /api/classes/watch ───────────────────────────────────────────────────
 // Validates an access pin (+email as a soft second factor) and returns the
@@ -223,27 +245,32 @@ export async function POST(request: NextRequest) {
     await setWatchCookie(enrollment.id);
 
     if (kind === "video") {
+      const episodes = await Promise.all(
+        enrollment.class.episodes.map(async (ep) => ({
+          id: ep.id,
+          title: ep.title,
+          episodeNumber: ep.episodeNumber,
+          videoUrl: await deliveryUrl(
+            ep.videoUrl,
+            `/api/classes/stream/${ep.id}`
+          ),
+          videoPassword: ep.videoPassword || "",
+          duration: ep.duration || null,
+        }))
+      );
       return NextResponse.json({
         authorized: true,
         kind: "video",
         className: enrollment.class.title,
-        episodes: enrollment.class.episodes.map((ep) => ({
-          id: ep.id,
-          title: ep.title,
-          episodeNumber: ep.episodeNumber,
-          videoUrl: isDriveUrl(ep.videoUrl)
-            ? `/api/classes/stream/${ep.id}`
-            : ep.videoUrl,
-          videoPassword: ep.videoPassword || "",
-          duration: ep.duration || null,
-        })),
+        episodes,
         // Optional companion PDF on a video class. Omitted entirely when unset
         // so the client can simply check for its presence.
         ...(enrollment.class.pdfUrl
           ? {
-              pdfUrl: isDriveUrl(enrollment.class.pdfUrl)
-                ? `/api/classes/stream/${enrollment.class.id}/pdf`
-                : enrollment.class.pdfUrl,
+              pdfUrl: await deliveryUrl(
+                enrollment.class.pdfUrl,
+                `/api/classes/stream/${enrollment.class.id}/pdf`
+              ),
             }
           : {}),
       });
@@ -254,9 +281,10 @@ export async function POST(request: NextRequest) {
       authorized: true,
       kind: "pdf",
       className: enrollment.class.title,
-      pdfUrl: isDriveUrl(enrollment.class.pdfUrl as string)
-        ? `/api/classes/stream/${enrollment.class.id}/pdf`
-        : enrollment.class.pdfUrl,
+      pdfUrl: await deliveryUrl(
+        enrollment.class.pdfUrl as string,
+        `/api/classes/stream/${enrollment.class.id}/pdf`
+      ),
     });
   } catch (error) {
     console.error("[POST /api/classes/watch]", error);

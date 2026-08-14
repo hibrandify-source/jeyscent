@@ -103,6 +103,83 @@ export default function AdminClassDetailPage() {
   });
   const [episodeOps, setEpisodeOps] = useState<Record<string, boolean>>({});
   const [editingEp, setEditingEp] = useState<Record<string, EpisodeDraft>>({});
+  const [uploadState, setUploadState] = useState<
+    Record<string, { progress: number | null; error?: string }>
+  >({});
+  const [newEpFile, setNewEpFile] = useState<File | null>(null);
+
+  /**
+   * Two-step R2 upload: POST to the admin API for a presigned PUT URL, then
+   * stream the file browser -> R2 with progress. Never passes through Vercel,
+   * so multi-GB uploads are not bounded by the 300s function limit.
+   * `onKey` receives the R2 object key, which is saved into videoUrl/pdfUrl.
+   */
+  const startUpload = async (
+    target: "episode" | "pdf",
+    file: File,
+    episodeId: string | null,
+    onKey: (key: string) => void
+  ) => {
+    const tag = target === "pdf" ? "pdf" : `ep:${episodeId}`;
+    setUploadState((s) => ({ ...s, [tag]: { progress: 0 } }));
+    try {
+      const res = await fetch(`/api/admin/classes/${id}/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target,
+          episodeId: episodeId ?? undefined,
+          filename: file.name,
+          contentType: file.type || "application/octet-stream",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to start upload");
+
+      const putOk = await new Promise<boolean>((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", data.uploadUrl);
+        xhr.setRequestHeader(
+          "Content-Type",
+          file.type || "application/octet-stream"
+        );
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setUploadState((s) => ({
+              ...s,
+              [tag]: {
+                progress: Math.round((e.loaded / e.total) * 100),
+              },
+            }));
+          }
+        };
+        xhr.onload = () => resolve(xhr.status >= 200 && xhr.status < 300);
+        xhr.onerror = () => resolve(false);
+        xhr.send(file);
+      });
+      if (!putOk) throw new Error("Upload to storage failed");
+      onKey(data.key);
+      setUploadState((s) => ({ ...s, [tag]: { progress: null } }));
+    } catch (err) {
+      console.error("R2 upload error:", err);
+      setUploadState((s) => ({
+        ...s,
+        [tag]: {
+          progress: null,
+          error: err instanceof Error ? err.message : "Upload failed",
+        },
+      }));
+    }
+  };
+
+  const uploadProgress = (tag: string) => {
+    const u = uploadState[tag];
+    if (u?.progress !== null && u?.progress !== undefined) {
+      return `Uploading… ${u.progress}%`;
+    }
+    if (u?.error) return u.error;
+    return null;
+  };
 
   const fetchData = async () => {
     try {
@@ -196,7 +273,19 @@ export default function AdminClassDetailPage() {
         const data = await res.json();
         throw new Error(data.error || "Failed to add module");
       }
+      const data = await res.json();
       setNewEp({ title: "", videoUrl: "", videoPassword: "", duration: "" });
+      if (newEpFile && data.episode?.id) {
+        const epId = data.episode.id as string;
+        setNewEpFile(null);
+        await startUpload("episode", newEpFile, epId, async (key) => {
+          await fetch(`/api/admin/classes/${id}/episodes/${epId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ videoUrl: key }),
+          });
+        });
+      }
       await fetchData();
     } catch (err) {
       console.error("Add module error:", err);
@@ -549,16 +638,35 @@ export default function AdminClassDetailPage() {
                 </>
               )}
             </label>
-            <input
-              type="text"
-              value={form.pdfUrl}
-              onChange={(e) => setForm((f) => ({ ...f, pdfUrl: e.target.value }))}
-              className="w-full border border-gray-200 px-4 py-2 text-sm focus:outline-none focus:border-black font-mono"
-              placeholder="https://res.cloudinary.com/.../class-notes.pdf"
-            />
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={form.pdfUrl}
+                onChange={(e) => setForm((f) => ({ ...f, pdfUrl: e.target.value }))}
+                className="w-full border border-gray-200 px-4 py-2 text-sm focus:outline-none focus:border-black font-mono"
+                placeholder="https://res.cloudinary.com/.../class-notes.pdf"
+              />
+              <label className="shrink-0 border border-black px-4 py-2 text-[10px] uppercase tracking-[2px] cursor-pointer hover:bg-black hover:text-white transition-colors">
+                {uploadProgress("pdf") ?? "Upload to R2"}
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  disabled={!!uploadState.pdf?.progress}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    e.target.value = "";
+                    startUpload("pdf", f, null, (key) =>
+                      setForm((s) => ({ ...s, pdfUrl: key }))
+                    );
+                  }}
+                />
+              </label>
+            </div>
             <p className="text-xs text-muted mt-1">
               {form.kind === "pdf"
-                ? "Direct link to the PDF (Cloudinary or any direct URL). Required for a PDF class."
+                ? "Direct link to the PDF (Cloudinary or any direct URL), or upload it to R2. Required for a PDF class."
                 : "Bundle a downloadable PDF alongside the video(s). Leave blank if this class has no PDF."}
             </p>
           </div>
@@ -642,6 +750,7 @@ export default function AdminClassDetailPage() {
                           <label className="block text-[10px] uppercase tracking-[2px] text-muted mb-1">
                             Video URL
                           </label>
+                          <div className="flex gap-3">
                           <input
                             type="text"
                             value={draft.videoUrl}
@@ -653,6 +762,31 @@ export default function AdminClassDetailPage() {
                             }
                             className="w-full border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-black font-mono"
                           />
+                          <label className="shrink-0 border border-black px-4 py-2 text-[10px] uppercase tracking-[2px] cursor-pointer hover:bg-black hover:text-white transition-colors">
+                            {uploadProgress(`ep:${ep.id}`) ?? "Upload to R2"}
+                            <input
+                              type="file"
+                              accept="video/*"
+                              className="hidden"
+                              disabled={!!uploadState[`ep:${ep.id}`]?.progress}
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (!f) return;
+                                e.target.value = "";
+                                startUpload("episode", f, ep.id, (key) =>
+                                  setEditingEp((s) => ({
+                                    ...s,
+                                    [ep.id]: { ...draft, videoUrl: key },
+                                  }))
+                                );
+                              }}
+                            />
+                          </label>
+                        </div>
+                        <p className="text-xs text-muted -mt-2">
+                          Paste a Drive URL, or upload an MP4/H.264 video file
+                          (H.264, not .mov/HEVC).
+                        </p>
                         </div>
                         <div>
                           <label className="block text-[10px] uppercase tracking-[2px] text-muted mb-1">
@@ -768,13 +902,38 @@ export default function AdminClassDetailPage() {
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <input
-                    type="text"
-                    value={newEp.videoUrl}
-                    onChange={(e) => setNewEp((s) => ({ ...s, videoUrl: e.target.value }))}
-                    className="w-full border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-black font-mono"
-                    placeholder="Google Drive url (set sharing to 'Anyone with the link')"
-                  />
+                  <div className="flex gap-3">
+                    <input
+                      type="text"
+                      value={newEp.videoUrl}
+                      onChange={(e) => setNewEp((s) => ({ ...s, videoUrl: e.target.value }))}
+                      className="w-full border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-black font-mono"
+                      placeholder="Google Drive url (set sharing to 'Anyone with the link')"
+                    />
+                    <label className="shrink-0 border border-black px-4 py-2 text-[10px] uppercase tracking-[2px] cursor-pointer hover:bg-black hover:text-white transition-colors">
+                      {newEpFile
+                        ? newEpFile.name.length > 24
+                          ? `${newEpFile.name.slice(0, 24)}…`
+                          : newEpFile.name
+                        : "Upload video"}
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          e.target.value = "";
+                          setNewEpFile(f);
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {newEpFile && (
+                    <p className="text-xs text-muted mt-1">
+                      Will upload to R2 after the module is created. Prefer H.264
+                      MP4 (not .mov/HEVC).
+                    </p>
+                  )}
                 </div>
                 <input
                   type="text"
