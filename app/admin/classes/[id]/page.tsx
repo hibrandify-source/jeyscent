@@ -294,6 +294,24 @@ export default function AdminClassDetailPage() {
     }
   };
 
+  const handleRotatePin = async (enrollmentId: string) => {
+    if (!confirm("Rotate this student's access pin? The current pin will stop working immediately, and their device binding will be reset so they can register a new device.")) return;
+    try {
+      const res = await fetch(`/api/admin/classes/${id}/rotate-pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enrollmentId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to rotate pin");
+      alert(`New access pin: ${data.pin}\n\nDevice binding reset. The previous pin is now invalid. Share the new pin with the student.`);
+      fetchData();
+    } catch (err) {
+      console.error("Rotate pin error:", err);
+      setError(err instanceof Error ? err.message : "Could not rotate access pin.");
+    }
+  };
+
   const handleDeleteClass = async () => {
     if (!confirm("Delete this class and all its enrollments? This cannot be undone.")) return;
     try {
@@ -842,15 +860,24 @@ export default function AdminClassDetailPage() {
                       {new Date(enr.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}
                     </td>
                     <td className="py-4 px-6 text-right">
-                      {enr.device && (
+                      <div className="flex gap-2 justify-end">
                         <button
-                          onClick={() => handleResetBinding(enr.id)}
-                          className="text-[10px] uppercase tracking-[2px] border border-black px-3 py-1.5 hover:bg-black hover:text-white transition-colors"
-                          title="Reset IP binding so the student can use a new device"
+                          onClick={() => handleRotatePin(enr.id)}
+                          className="text-[10px] uppercase tracking-[2px] border border-amber-600 text-amber-700 px-3 py-1.5 hover:bg-amber-600 hover:text-white transition-colors"
+                          title="Generate a new access pin and reset device binding. The old pin stops working immediately."
                         >
-                          Reset IP
+                          Rotate Pin
                         </button>
-                      )}
+                        {enr.device && (
+                          <button
+                            onClick={() => handleResetBinding(enr.id)}
+                            className="text-[10px] uppercase tracking-[2px] border border-black px-3 py-1.5 hover:bg-black hover:text-white transition-colors"
+                            title="Reset IP binding so the student can use a new device"
+                          >
+                            Reset IP
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
