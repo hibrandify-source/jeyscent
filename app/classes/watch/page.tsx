@@ -164,8 +164,7 @@ export default function ClassWatchPage() {
                               key={ep.id}
                               src={driveEmbedUrl(driveId)}
                               className="w-full h-full"
-                              allow="autoplay; encrypted-media"
-                              allowFullScreen
+                              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                               title={ep.title}
                             />
                             {/* Block clicks on Google's top-right chrome. ~10%
