@@ -9,7 +9,7 @@ import { UserType } from "./types";
 // throw, and the build crashes even though the secret is only needed at
 // request time. By deferring to a function call, the build passes and the
 // error only surfaces when a token is actually signed/verified.
-function getJwtSecret(): string {
+export function getJwtSecret(): string {
   if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
   if (process.env.NODE_ENV === "production") {
     throw new Error("JWT_SECRET environment variable is required in production");

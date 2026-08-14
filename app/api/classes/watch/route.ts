@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import jwt from "jsonwebtoken";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
+import { getClientIp, normalizeUa } from "@/lib/device";
+import { getJwtSecret } from "@/lib/auth";
+import { isDriveUrl } from "@/lib/drive";
 
 // ── POST /api/classes/watch ───────────────────────────────────────────────────
 // Validates an access pin (+email as a soft second factor) and returns the
@@ -23,35 +28,27 @@ import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 //     access on its own.
 //   • Binding exists, UA differs -> 403. A different browser/device, period.
 //
+// On success an HttpOnly `watch_access` cookie (signed, 7 days) is set. The
+// /api/classes/stream/* routes verify it per request and re-check the device
+// binding, so Drive-hosted assets never expose their file id to the browser.
+//
 // IP source: `x-forwarded-for` first entry (Vercel passes it through),
 // falling back to `request.ip`. Stripped of port. Used for logging only.
 // UA source: the `user-agent` request header, normalized so same-browser minor
 // version bumps (and minor OS point releases) don't trip the lock.
 
-function getClientIp(request: NextRequest): string {
-  const xff = request.headers.get("x-forwarded-for");
-  if (xff) {
-    const first = xff.split(",")[0]?.trim();
-    if (first) return first.split(":")[0];
-  }
-  const directIp = (request as unknown as { ip?: string }).ip;
-  if (directIp) return directIp.split(":")[0];
-  return "0.0.0.0";
-}
-
-// Normalize a UA for the purposes of "same device?" comparison. We strip the
-// fine-grained version tokens (e.g. "Chrome/124.0.6367.91" -> "Chrome") so a
-// same-browser minor update doesn't trip the lock, while keeping the
-//identifying parts (browser family + OS family + device family + build).
-function normalizeUa(raw: string): string {
-  return raw
-    // Collapse Chrome/Edge/Firefox/Safari version tokens
-    .replace(/(Chrome|Edge|Edg|Firefox|Safari|Version|OPR|Opera|CriOS|FxiOS)\/[\d.]+/g, "$1")
-    // Collapse mobile-version tokens
-    .replace(/Mobile\/[\dA-F]+/g, "Mobile")
-    // Trim runs of whitespace left behind
-    .replace(/\s+/g, " ")
-    .trim();
+async function setWatchCookie(enrollmentId: string) {
+  const token = jwt.sign({ enrollmentId }, getJwtSecret(), {
+    expiresIn: "7d",
+  });
+  const cookieStore = await cookies();
+  cookieStore.set("watch_access", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/api/classes",
+    maxAge: 60 * 60 * 24 * 7,
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -219,7 +216,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── Authorized — return content for the class's kind ────────────────────
+    // ── Authorized — issue the stream cookie and return content ────────────
+    // Drive-hosted URLs are rewritten to our streaming proxy so the raw Drive
+    // link (and its file id) never reaches the browser — no pop-out, no public
+    // link. Non-Drive URLs pass through unchanged.
+    await setWatchCookie(enrollment.id);
+
     if (kind === "video") {
       return NextResponse.json({
         authorized: true,
@@ -229,24 +231,32 @@ export async function POST(request: NextRequest) {
           id: ep.id,
           title: ep.title,
           episodeNumber: ep.episodeNumber,
-          videoUrl: ep.videoUrl,
+          videoUrl: isDriveUrl(ep.videoUrl)
+            ? `/api/classes/stream/${ep.id}`
+            : ep.videoUrl,
           videoPassword: ep.videoPassword || "",
           duration: ep.duration || null,
         })),
         // Optional companion PDF on a video class. Omitted entirely when unset
         // so the client can simply check for its presence.
         ...(enrollment.class.pdfUrl
-          ? { pdfUrl: enrollment.class.pdfUrl }
+          ? {
+              pdfUrl: isDriveUrl(enrollment.class.pdfUrl)
+                ? `/api/classes/stream/${enrollment.class.id}/pdf`
+                : enrollment.class.pdfUrl,
+            }
           : {}),
       });
     }
 
-    // kind === "pdf"
+    // kind === "pdf"  (pdfUrl guaranteed non-null by the pre-flight check above)
     return NextResponse.json({
       authorized: true,
       kind: "pdf",
       className: enrollment.class.title,
-      pdfUrl: enrollment.class.pdfUrl,
+      pdfUrl: isDriveUrl(enrollment.class.pdfUrl as string)
+        ? `/api/classes/stream/${enrollment.class.id}/pdf`
+        : enrollment.class.pdfUrl,
     });
   } catch (error) {
     console.error("[POST /api/classes/watch]", error);

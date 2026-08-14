@@ -23,31 +23,10 @@ type WatchResponse =
       error?: string;
     };
 
-// ── Google Drive URL helpers ────────────────────────────────────────────────
-// Google Drive's `uc?export=view` and `uc?export=download` URLs return HTML
-// pages (or virus-scan interstitials for files ≥100 MB), neither of which play
-// in a native `<video>` tag — they show a blank player. The only reliable way
-// to play a Drive file (including ≥100 MB ones) on a third-party site is the
-// `https://drive.google.com/file/d/FILE_ID/preview` embed rendered in an
-// `<iframe>`. Detect any Drive URL form and normalize it into the preview URL.
-function getDriveFileId(url: string): string | null {
-  if (!url) return null;
-  // https://drive.google.com/file/d/FILE_ID/preview  ->  FILE_ID
-  let m = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if (m) return m[1];
-  // https://drive.google.com/open?id=FILE_ID
-  m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-  if (m) return m[1];
-  // https://drive.google.com/uc?export=view&id=FILE_ID  (covered by the id= pattern above)
-  return null;
-}
-
-function driveEmbedUrl(fileId: string): string {
-  // `rm=minimal` strips most of Google's UI chrome from the preview embed —
-  // critically, this removes the "pop-out" button in the top-right that
-  // would open a new tab to drive.google.com and bypass our gate.
-  return `https://drive.google.com/file/d/${fileId}/preview?rm=minimal`;
-}
+// ── No Drive helpers here ─────────────────────────────────────────────────────
+// Drive-hosted URLs are rewritten server-side to the /api/classes/stream/*
+// proxy, so this page always renders a native <video> — the Drive iframe (and
+// its pop-out escape hatch) is gone entirely.
 
 export default function ClassWatchPage() {
   const [pin, setPin] = useState("");
@@ -141,61 +120,23 @@ export default function ClassWatchPage() {
                 {/* Player */}
                 <div>
                   <div className="relative aspect-video bg-black overflow-hidden">
-                    {(() => {
-                      const ep = episodes[activeEpisodeIdx];
-                      if (!ep) {
-                        return (
-                          <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
-                            No module available yet.
-                          </div>
-                        );
-                      }
-                      const driveId = getDriveFileId(ep.videoUrl);
-                      if (driveId) {
-                        // Google Drive — the preview URL is the only reliable
-                        // form for big files (≥100 MB). It must render in an
-                        // <iframe>, not a <video>. The transparent overlay
-                        // covers Google's top-right corner (pop-out, logo) so
-                        // clicks there can't escape to drive.google.com — a
-                        // CSS-level backup on top of the `?rm=minimal` param.
-                        return (
-                          <>
-                            <iframe
-                              key={ep.id}
-                              src={driveEmbedUrl(driveId)}
-                              className="w-full h-full"
-                              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-                              title={ep.title}
-                            />
-                            {/* Block clicks on Google's top-right chrome (logo /
-                                pop-out) in desktop browsers so the student can't
-                                escape to drive.google.com. On mobile the Drive
-                                preview lays its UI out differently and this
-                                overlay would occlude visible video, so it is
-                                only applied on viewports >= 1024px (tailored
-                                to where the iframe sits on the desktop page).
-                                ~12% × 16% keeps Google's top-right controls
-                                covered without touching the play button. */}
-                            <div
-                              aria-hidden="true"
-                              className="absolute top-0 right-0 w-[12%] h-[16%] bg-transparent hidden lg:block"
-                              style={{ pointerEvents: "auto" }}
-                            />
-                          </>
-                        );
-                      }
-                      // Direct mp4 (or any non-Drive URL) — native element.
-                      return (
-                        <video
-                          key={ep.id}
-                          controls
-                          controlsList="nodownload noplaybackrate"
-                          disablePictureInPicture
-                          className="w-full h-full"
-                          src={ep.videoUrl}
-                        />
-                      );
-                    })()}
+                    {episodes[activeEpisodeIdx] ? (
+                      // All episodes are served via the native element: Drive
+                      // files come through the device-locked streaming proxy,
+                      // direct mp4s play straight from their URL.
+                      <video
+                        key={episodes[activeEpisodeIdx].id}
+                        controls
+                        controlsList="nodownload noplaybackrate"
+                        disablePictureInPicture
+                        className="w-full h-full"
+                        src={episodes[activeEpisodeIdx].videoUrl}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
+                        No module available yet.
+                      </div>
+                    )}
                   </div>
 
                   {/* Active module title + reveal-hide password */}
