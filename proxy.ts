@@ -17,9 +17,12 @@ import type { NextRequest } from "next/server";
 //   • QorePay redirect (navigation, not fetch) -> form-action https://api.qorepay.com
 //   • inline styles via style={{...}}          -> style-src 'unsafe-inline'
 //   • Gmail mailto links                       -> mailto: scheme
+//   • R2 presigned uploads (XHR from admin)    -> connect-src https://…r2.cloudflarestorage.com
+//   • R2 presigned video streams (<video>)     -> media-src https://…r2.cloudflarestorage.com
 // 'unsafe-eval' is required for Next.js dev mode; in prod it could be
 // removed, but keeping it makes the rule work in both modes without a
 // conditional that's easy to forget when promoting build to prod.
+const R2_HOST = "https://cef4262c981af992b448ebda8d3604e4.eu.r2.cloudflarestorage.com";
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
@@ -29,7 +32,8 @@ const CONTENT_SECURITY_POLICY = [
   "frame-src 'self' https://drive.google.com",
   "frame-ancestors 'none'",
   "form-action 'self' https://api.qorepay.com",
-  "connect-src 'self'",
+  `connect-src 'self' ${R2_HOST}`,
+  `media-src 'self' ${R2_HOST} blob:`,
   "base-uri 'self'",
   "object-src 'none'",
   "upgrade-insecure-requests",

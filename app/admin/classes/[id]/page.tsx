@@ -136,28 +136,37 @@ export default function AdminClassDetailPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to start upload");
 
-      const putOk = await new Promise<boolean>((resolve) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("PUT", data.uploadUrl);
-        xhr.setRequestHeader(
-          "Content-Type",
-          file.type || "application/octet-stream"
-        );
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            setUploadState((s) => ({
-              ...s,
-              [tag]: {
-                progress: Math.round((e.loaded / e.total) * 100),
-              },
-            }));
-          }
-        };
-        xhr.onload = () => resolve(xhr.status >= 200 && xhr.status < 300);
-        xhr.onerror = () => resolve(false);
-        xhr.send(file);
-      });
-      if (!putOk) throw new Error("Upload to storage failed");
+      const putOk = await new Promise<{ ok: boolean; detail?: string }>(
+        (resolve) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", data.uploadUrl);
+          xhr.setRequestHeader(
+            "Content-Type",
+            file.type || "application/octet-stream"
+          );
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              setUploadState((s) => ({
+                ...s,
+                [tag]: {
+                  progress: Math.round((e.loaded / e.total) * 100),
+                },
+              }));
+            }
+          };
+          xhr.onload = () =>
+            resolve({
+              ok: xhr.status >= 200 && xhr.status < 300,
+              detail: `${xhr.status} ${xhr.statusText}`,
+            });
+          xhr.onerror = () =>
+            resolve({ ok: false, detail: "network error (CSP or CORS)" });
+          xhr.send(file);
+        }
+      );
+      if (!putOk.ok) {
+        throw new Error(`Upload to storage failed (${putOk.detail})`);
+      }
       onKey(data.key);
       setUploadState((s) => ({ ...s, [tag]: { progress: null } }));
     } catch (err) {

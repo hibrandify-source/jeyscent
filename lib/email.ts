@@ -266,14 +266,11 @@ export async function sendClassAccessEmail(data: {
   episodeCount?: number;
   singleEpisode?: boolean;
   hasPdf?: boolean;
-  /** When set, the email also announces that a JeyScent account was created with this temp password. */
-  accountPassword?: string;
 }) {
-  console.log(`[email] Sending class access pin to: ${data.email}${data.accountPassword ? " (+ new account)" : ""}`);
+  console.log(`[email] Sending class access pin to: ${data.email}`);
 
   const isVideo = data.kind === "video";
   const hasCompanionPdf = isVideo && data.hasPdf;
-  const includeAccount = !!data.accountPassword;
 
   const watchLabel = isVideo
     ? data.singleEpisode
@@ -284,23 +281,6 @@ export async function sendClassAccessEmail(data: {
   const includesLine = isVideo
     ? `Your purchase includes ${data.singleEpisode ? "a pre-recorded video" : `all ${data.episodeCount || ""} modules`}${hasCompanionPdf ? " and a downloadable companion PDF" : ""}.`
     : "Your purchase includes a downloadable PDF document.";
-
-  const accountBlock = includeAccount
-    ? `
-      <div style="background:#f0fdf4;padding:20px;border-radius:4px;margin:0 0 24px;border-left:4px solid #16a34a;">
-        <p style="margin:0 0 8px;font-weight:600;color:#166534;">Your JeyScent account is ready</p>
-        <p style="margin:0 0 12px;font-size:14px;color:#166534;line-height:1.6;">
-          We automatically created a JeyScent account for you so you can manage your enrollments and watch your classes. Use the temporary password below to sign in.
-        </p>
-        <p style="margin:0 0 4px;font-size:12px;color:#166534;">Login email</p>
-        <p style="margin:0 0 12px;font-size:15px;color:#0f172a;">${data.email}</p>
-        <p style="margin:0 0 4px;font-size:12px;color:#166534;">Temporary password</p>
-        <p style="margin:0;font-size:20px;font-weight:bold;letter-spacing:2px;font-family:monospace;color:#0f172a;">${data.accountPassword}</p>
-        <p style="margin:12px 0 0;font-size:12px;color:#15803d;">
-          Please change this password after you sign in.
-        </p>
-      </div>`
-    : "";
 
   await sendWithRetry({
     from: `"Jey Scent" <${process.env.GMAIL_USER}>`,
@@ -321,7 +301,7 @@ export async function sendClassAccessEmail(data: {
       <p style="color:#6b6b6b;line-height:1.6;margin-bottom:24px;">
         ${includesLine} Below is your personal access pin. Keep it safe — it works on only one device, so please
         don&rsquo;t share it.
-      </p>${accountBlock}
+      </p>
       <div style="background:#faf9f6;padding:24px;text-align:center;margin-bottom:24px;border:1px dashed #ccc;">
         <p style="margin:0 0 8px;font-size:12px;color:#6b6b6b;text-transform:uppercase;letter-spacing:2px;">Your Access Pin</p>
         <p style="margin:0;font-size:28px;font-weight:bold;letter-spacing:4px;font-family:monospace;">${data.pin}</p>
@@ -330,11 +310,7 @@ export async function sendClassAccessEmail(data: {
         <a href="${process.env.NEXT_PUBLIC_BASE_URL}/classes/watch"
            style="display:inline-block;background:#000;color:#fff;padding:14px 40px;text-decoration:none;font-size:13px;text-transform:uppercase;letter-spacing:2px;margin:0 4px 12px;display:inline-block;">
           ${watchLabel}
-        </a>${includeAccount ? `
-        <a href="${process.env.NEXT_PUBLIC_BASE_URL}/auth/login"
-           style="display:inline-block;border:2px solid #000;color:#000;padding:12px 38px;text-decoration:none;font-size:13px;text-transform:uppercase;letter-spacing:2px;margin:0 4px 12px;display:inline-block;">
-          Sign In to JeyScent
-        </a>` : ``}
+        </a>
       </div>
     </div>
     <div style="background:#faf9f6;padding:30px;text-align:center;">

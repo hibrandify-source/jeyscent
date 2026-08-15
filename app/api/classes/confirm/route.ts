@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createUser, getUserByEmail } from "@/lib/db";
-import { hashPassword } from "@/lib/auth";
 import { sendClassAccessEmail } from "@/lib/email";
 import crypto from "crypto";
 
@@ -13,18 +11,12 @@ import crypto from "crypto";
 //   2. Atomically creates the ClassEnrollment and increments earlyBirdUsed
 //      (only if this was an early-bird payment).
 //   3. Deletes the PendingEnrollment row.
-//   4. If no JeyScent account exists for the buyer's email, auto-creates one
-//      with a generated password (so the buyer can sign in to watch later
-//      and we have a stable identity for repeat purchases).
-//   5. Emails the access pin (+ account credentials for new accounts) to the buyer.
-function generatePassword(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  let password = "";
-  for (let i = 0; i < 10; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return password;
-}
+//   4. Emails the access pin to the buyer.
+//
+// No account is created: class access is fully pin-based (enrollment +
+// device binding), so the auto-created dormant account (and its random
+// emailed password) was removed — the dashboard didn't show enrollments
+// anyway, and students register themselves if they ever want an account.
 
 export async function POST(request: NextRequest) {
   try {
@@ -190,36 +182,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Auto-create JeyScent account if none exists for this email ────────
-    // Every student who pays gets a proper user account automatically. The
-    // account creation is best-effort: if a User row already exists (e.g.
-    // they previously placed a product order, or signed up manually), we
-    // skip it. If two enrollments race on the same email, prisma.user's
-    // unique email constraint will throw P2002 — we catch and skip.
-    let accountPassword: string | undefined;
-    try {
-      const existing = await getUserByEmail(enrollment.email);
-      if (!existing) {
-        const temp = generatePassword();
-        const hashed = await hashPassword(temp);
-        await createUser(enrollment.name, enrollment.email, hashed);
-        accountPassword = temp;
-        console.log("[classes/confirm] Auto-created account for:", enrollment.email);
-      } else {
-        console.log("[classes/confirm] Existing account found for:", enrollment.email, "(role:", existing.role + ")");
-      }
-    } catch (err: unknown) {
-      // P2002 = unique-constraint violation (concurrent create on same email).
-      // Treat as "account exists" and proceed without sending credentials.
-      const code =
-        (err as { code?: string })?.code || (err as { meta?: { code?: string } })?.meta?.code;
-      if (code === "P2002") {
-        console.log("[classes/confirm] Account already exists for:", enrollment.email, "(race-safe)");
-      } else {
-        console.error("[classes/confirm] Auto-account creation failed (non-fatal):", err);
-      }
-    }
-
     // ── Send access pin by email ────────────────────────────────────────────
     try {
       const kind = (pending.class.kind as "video" | "pdf") || "video";
@@ -232,7 +194,6 @@ export async function POST(request: NextRequest) {
         episodeCount: kind === "video" ? pending.class.episodes.length : undefined,
         singleEpisode: kind === "video" ? pending.class.singleEpisode : undefined,
         hasPdf: kind === "video" ? !!pending.class.pdfUrl : undefined,
-        accountPassword,
       });
     } catch (emailErr) {
       console.error("[classes/confirm] Access-pin email failed (non-fatal):", emailErr);
