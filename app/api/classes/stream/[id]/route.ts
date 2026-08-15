@@ -5,18 +5,25 @@ import { getJwtSecret } from "@/lib/auth";
 import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 import { getClientIp, normalizeUa } from "@/lib/device";
 import { getDriveFileId, fetchDriveFile } from "@/lib/drive";
+import { presignGet } from "@/lib/r2";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 // ── GET /api/classes/stream/[id] ─────────────────────────────────────────────
-// Proxies a class episode's video bytes to the bound device. The watch API
-// rewrites Drive-hosted episodes to this route, so the Drive file id (and the
-// "pop-out" escape hatch) never reaches the browser. Access is granted by the
-// HttpOnly `watch_access` cookie set at pin authorization time, and re-verified
-// per request against the enrollment's device binding (normalized UA), so a
-// copied cookie can't be used from a different device.
+// Serves a class episode's video to the bound device. Two flavors:
+//   • Drive-hosted (has a drive.google.com URL) — bytes are proxied through
+//     this route so the Drive file id never reaches the browser.
+//   • R2-hosted (videoUrl is a bare object key, no scheme) — this route
+//     redirects (307) to a freshly signed 30-minute R2 URL. Because the
+//     player re-requests on every range/seek, each request gets a new URL:
+//     expiry can never interrupt playback, and any URL captured from the
+//     network panel dies within 30 minutes.
+// Access is granted by the HttpOnly `watch_access` cookie set at pin
+// authorization time, and re-verified per request against the enrollment's
+// device binding (normalized UA), so a copied cookie can't be used from a
+// different device.
 //
 // Range requests pass through so the native <video> element can seek; the
 // upstream status (200/206) and Content-Range headers are forwarded as-is.
@@ -80,6 +87,27 @@ export async function GET(
 
   const range = request.headers.get("range");
   const driveId = getDriveFileId(episode.videoUrl);
+
+  // ── R2-hosted: fresh 30-min presigned URL per request ───────────────────
+  // A bare key (no scheme) is an R2 object. Redirect to a newly signed URL so
+  // every range request the player makes gets a fresh one — playback can
+  // never outlive its URL, and anything captured in the network panel is dead
+  // within 30 minutes. `no-store` stops the browser caching the Location.
+  if (!driveId && !/^[a-z][a-z0-9+.-]*:\/\//i.test(episode.videoUrl)) {
+    try {
+      const signed = await presignGet(episode.videoUrl, 30 * 60);
+      return NextResponse.redirect(signed, {
+        status: 307,
+        headers: {
+          "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    } catch (err) {
+      console.error(`[stream] Failed to presign R2 key for episode ${episodeId}:`, err);
+      return new Response("Upstream error", { status: 502 });
+    }
+  }
 
   let upstream: Response;
   try {

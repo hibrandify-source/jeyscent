@@ -75,7 +75,14 @@ export default function ClassWatchPage() {
     const episodes = authorized.episodes || (authorized.kind === "video" ? [] : []);
 
     return (
-      <div className="page-transition pt-24 lg:pt-28 min-h-screen">
+      // Right-click is suppressed on the whole authorized view (Save video as…,
+      // Copy video address, Save as… etc). Native player controls (play, seek,
+      // volume, fullscreen) are unaffected. The pin form below keeps its
+      // context menu so pasting the pin from email keeps working.
+      <div
+        className="page-transition pt-24 lg:pt-28 min-h-screen select-none"
+        onContextMenu={(e) => e.preventDefault()}
+      >
         <div className="max-w-5xl mx-auto px-6 py-12">
           <Link
             href="/classes"

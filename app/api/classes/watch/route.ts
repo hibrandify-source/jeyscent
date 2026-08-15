@@ -10,19 +10,26 @@ import { presignGet } from "@/lib/r2";
 
 // Resolve a stored asset reference to the URL the browser should actually
 // fetch. Three flavors:
-//   • Drive link        -> our streaming proxy (hides the raw Drive URL/file id)
-//   • No scheme (R2 key) -> presigned R2 GET URL (bucket is private; a bare
-//                           key is 403 without a signature). 7-day expiry so a
-//                           student's device keeps playing without re-entering
-//                           their pin every day.
-//   • Any other URL     -> pass through unchanged
+//   • Drive link         -> our streaming proxy (hides the raw Drive URL/file id)
+//   • No scheme (R2 key) -> the streaming proxy, which 307-redirects to a
+//                           freshly signed 30-minute R2 URL per request
+//   • Any other URL      -> pass through unchanged
 async function deliveryUrl(url: string, streamPath: string): Promise<string> {
+  if (isDriveUrl(url)) return streamPath;
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return streamPath;
+  return url;
+}
+
+// The companion PDF / pdf-kind classes stay as direct presigned URLs (7-day):
+// PDFs are free-for-students content, download-friendly, and open in a new
+// tab rather than through the player, so the stream route doesn't apply.
+async function deliveryPdfUrl(url: string, streamPath: string): Promise<string> {
   if (isDriveUrl(url)) return streamPath;
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) {
     try {
       return await presignGet(url, 60 * 60 * 24 * 7);
     } catch (err) {
-      console.error("[classes/watch] Failed to presign R2 key:", url, err);
+      console.error("[classes/watch] Failed to presign R2 pdf key:", url, err);
       return url;
     }
   }
@@ -267,7 +274,7 @@ export async function POST(request: NextRequest) {
         // so the client can simply check for its presence.
         ...(enrollment.class.pdfUrl
           ? {
-              pdfUrl: await deliveryUrl(
+              pdfUrl: await deliveryPdfUrl(
                 enrollment.class.pdfUrl,
                 `/api/classes/stream/${enrollment.class.id}/pdf`
               ),
@@ -281,7 +288,7 @@ export async function POST(request: NextRequest) {
       authorized: true,
       kind: "pdf",
       className: enrollment.class.title,
-      pdfUrl: await deliveryUrl(
+      pdfUrl: await deliveryPdfUrl(
         enrollment.class.pdfUrl as string,
         `/api/classes/stream/${enrollment.class.id}/pdf`
       ),
