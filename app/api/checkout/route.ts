@@ -1,24 +1,57 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
-import { createOrder, createUser, getUserByEmail } from "@/lib/db";
-import { hashPassword, generateToken } from "@/lib/auth";
+import { getCurrentUser, generateToken } from "@/lib/auth";
 import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
-import {
-  sendOrderConfirmation,
-  sendAdminNotification,
-  sendWelcomeEmail,
-} from "@/lib/email";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
-import { products, getSalePrice } from "@/data/products";
+import {
+  validatePayloadStructure,
+  validatePayloadAgainstCatalog,
+  verifyQorepayPayment,
+  createOrderFromPayload,
+  type OrderPayload,
+} from "@/lib/orders";
 
-function generatePassword(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  let password = "";
-  for (let i = 0; i < 10; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
+// Legacy flat-field payload → canonical checkout payload (kept so any older
+// caller that POSTs the old shape keeps working).
+function flatToPayload(body: Record<string, unknown>): OrderPayload | null {
+  const items = body.items as
+    | { productId: string; name: string; size: string; quantity: number; price: number }[]
+    | undefined;
+  if (
+    !items?.length ||
+    !body.name ||
+    !body.email ||
+    !body.phone ||
+    body.total == null
+  ) {
+    return null;
   }
-  return password;
+  return {
+    form: {
+      name: String(body.name),
+      email: String(body.email),
+      phone: String(body.phone),
+      address: typeof body.shippingAddress === "string" ? body.shippingAddress : "",
+      area: "",
+      city: typeof body.shippingCity === "string" ? body.shippingCity : "",
+      state: typeof body.shippingState === "string" ? body.shippingState : "",
+    },
+    deliveryMethod: body.deliveryMethod === "pickup" ? "pickup" : "delivery",
+    isSubscription: Boolean(body.isSubscription),
+    items: items.map((i) => ({
+      productId: i.productId,
+      name: i.name,
+      size: i.size,
+      quantity: i.quantity,
+      price: i.price,
+    })),
+    totalPrice: typeof body.totalPrice === "number" ? body.totalPrice : Number(body.total),
+    grandTotal: Number(body.total),
+    shippingFee: typeof body.shippingFee === "number" ? body.shippingFee : 0,
+    isParkPickup: Boolean(body.isParkPickup),
+    deliveryEstimate: typeof body.deliveryEstimate === "string" ? body.deliveryEstimate : "",
+    createAccount: Boolean(body.createAccount),
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -31,111 +64,26 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const {
-      name,
-      email,
-      phone,
-      shippingAddress,
-      shippingCity,
-      shippingState,
-      deliveryMethod,
-      paymentRef,
-      total,
-      shippingFee,
-      isParkPickup,
-      deliveryEstimate,
-      items,
-      createAccount = false,
-    } = body;
+    const reference =
+      typeof body.reference === "string" && body.reference.trim()
+        ? body.reference.trim()
+        : typeof body.paymentRef === "string" && body.paymentRef.trim()
+        ? body.paymentRef.trim()
+        : null;
 
-    const isPickup = deliveryMethod === "pickup";
+    // ── Resolve the checkout payload ───────────────────────────────────────
+    // Preferred: the server-side snapshot (PendingOrder) written at payment
+    // initialization — this is what makes order creation independent of the
+    // customer's browser. Fallback: the client-supplied payload (canonical or
+    // legacy flat shape), validated against the live catalog as before.
+    let payload: OrderPayload;
+    let source: "snapshot" | "client" = "client";
 
-    // ── Core field validation ──────────────────────────────────────────────
-    const missing: string[] = [];
-    if (!name)                        missing.push("name");
-    if (!email)                       missing.push("email");
-    if (!phone)                       missing.push("phone");
-    if (total == null || total === "") missing.push("total");
-    if (!items?.length)               missing.push("items");
-
-    if (missing.length > 0) {
-      return NextResponse.json(
-        { error: `Missing required fields: ${missing.join(", ")}` },
-        { status: 400 }
-      );
-    }
-
-    // ── Address validation only for delivery orders ────────────────────────
-    if (!isPickup && (!shippingAddress || !shippingCity || !shippingState)) {
-      return NextResponse.json(
-        { error: "Missing required delivery address fields" },
-        { status: 400 }
-      );
-    }
-
-    // ── Server-side price validation ──────────────────────────────────────
-    // Don't trust client-sent prices — recompute from the source of truth
-    // (data/products.ts) and reject if anything doesn't match exactly.
-    let computedItemsTotal = 0;
-    for (const item of items) {
-      if (typeof item.productId !== "string" || !item.productId) {
-        return NextResponse.json({ error: "Invalid product in cart" }, { status: 400 });
-      }
-      if (typeof item.quantity !== "number" || item.quantity < 1 || !Number.isInteger(item.quantity)) {
-        return NextResponse.json({ error: "Invalid quantity in cart" }, { status: 400 });
-      }
-      const product = products.find((p) => p.id === item.productId);
-      if (!product) {
-        return NextResponse.json(
-          { error: `Invalid product: ${item.productId}` },
-          { status: 400 }
-        );
-      }
-      const sizeInfo = product.sizes.find((s) => s.size === item.size);
-      if (!sizeInfo) {
-        return NextResponse.json(
-          { error: `Invalid size for ${product.name}: ${item.size}` },
-          { status: 400 }
-        );
-      }
-      if (!sizeInfo.inStock) {
-        return NextResponse.json(
-          { error: `${product.name} (${item.size}) is out of stock` },
-          { status: 400 }
-        );
-      }
-      const expectedUnitPrice = getSalePrice(sizeInfo.price);
-      if (item.price !== expectedUnitPrice) {
-        return NextResponse.json(
-          { error: "Price mismatch — please refresh the page and try again" },
-          { status: 400 }
-        );
-      }
-      computedItemsTotal += expectedUnitPrice * item.quantity;
-    }
-
-    // Verify that total isn't less than the computed items total + shipping.
-    // (total should equal computedItemsTotal + shippingFee, but we allow
-    // the client to pass a higher total e.g. for rounding — just not lower.)
-    const expectedMinTotal = computedItemsTotal + (typeof shippingFee === "number" ? shippingFee : 0);
-    if (typeof total !== "number" || total < expectedMinTotal) {
-      return NextResponse.json(
-        { error: "Total mismatch — please refresh the page and try again" },
-        { status: 400 }
-      );
-    }
-
-    // ── Safe resolved values ───────────────────────────────────────────────
-    const resolvedAddress = isPickup ? "Self Pickup / Customer Rider" : shippingAddress;
-    const resolvedCity    = isPickup ? "N/A" : shippingCity;
-    const resolvedState   = isPickup ? "N/A" : shippingState;
-
-    // ── Duplicate order guard (fast-path) ──────────────────────────────────
-    if (paymentRef) {
+    if (reference) {
+      // ── Duplicate order guard (fast-path) ────────────────────────────────
       const existingOrder = await prisma.order.findFirst({
-        where: { paymentRef },
+        where: { paymentRef: reference },
       });
-
       if (existingOrder) {
         return NextResponse.json({
           orderId: existingOrder.id,
@@ -143,112 +91,148 @@ export async function POST(request: NextRequest) {
           message: "Order already exists",
         });
       }
+
+      const pending = await prisma.pendingOrder.findUnique({
+        where: { reference },
+      });
+
+      if (pending) {
+        const struct = validatePayloadStructure(pending.payload);
+        if (!struct.ok) {
+          return NextResponse.json({ error: struct.error }, { status: 400 });
+        }
+        payload = pending.payload as unknown as OrderPayload;
+        source = "snapshot";
+      } else if (body.payload) {
+        const struct = validatePayloadStructure(body.payload);
+        if (!struct.ok) {
+          return NextResponse.json({ error: struct.error }, { status: 400 });
+        }
+        const catalog = validatePayloadAgainstCatalog(body.payload as OrderPayload);
+        if (!catalog.ok) {
+          return NextResponse.json({ error: catalog.error }, { status: 400 });
+        }
+        payload = body.payload as OrderPayload;
+      } else {
+        const legacy = flatToPayload(body);
+        if (!legacy) {
+          return NextResponse.json(
+            { error: "No checkout data found for this reference" },
+            { status: 404 }
+          );
+        }
+        const struct = validatePayloadStructure(legacy);
+        if (!struct.ok) {
+          return NextResponse.json({ error: struct.error }, { status: 400 });
+        }
+        const catalog = validatePayloadAgainstCatalog(legacy);
+        if (!catalog.ok) {
+          return NextResponse.json({ error: catalog.error }, { status: 400 });
+        }
+        payload = legacy;
+      }
+
+      // ── Verify the payment with QorePay + amount match ──────────────────
+      // This is the security gate: an Order can only be created for a payment
+      // that genuinely succeeded AND charged exactly the order total. It also
+      // means a customer whose browser died at the gateway can be recovered —
+      // re-submitting the same reference safely creates the missing order.
+      const verify = await verifyQorepayPayment(reference);
+      if (!verify.ok || !verify.amountKobo) {
+        return NextResponse.json(
+          {
+            error: `Payment not verified. Status: ${verify.status || "unknown"}`,
+          },
+          { status: 400 }
+        );
+      }
+      if (verify.amountKobo !== Math.round(payload.grandTotal * 100)) {
+        console.error(
+          `[checkout] Amount mismatch for ${reference}: paid ${verify.amountKobo} kobo, order total ${Math.round(payload.grandTotal * 100)} kobo`
+        );
+        return NextResponse.json(
+          { error: "Amount mismatch — please contact support." },
+          { status: 400 }
+        );
+      }
+    } else {
+      // Legacy path — no payment reference: accept the canonical or flat
+      // client payload with the original validation, no gateway check.
+      if (body.payload) {
+        const struct = validatePayloadStructure(body.payload);
+        if (!struct.ok) {
+          return NextResponse.json({ error: struct.error }, { status: 400 });
+        }
+        const catalog = validatePayloadAgainstCatalog(body.payload as OrderPayload);
+        if (!catalog.ok) {
+          return NextResponse.json({ error: catalog.error }, { status: 400 });
+        }
+        payload = body.payload as OrderPayload;
+      } else {
+        const legacy = flatToPayload(body);
+        if (!legacy) {
+          return NextResponse.json(
+            { error: "Missing required fields" },
+            { status: 400 }
+          );
+        }
+        const struct = validatePayloadStructure(legacy);
+        if (!struct.ok) {
+          return NextResponse.json({ error: struct.error }, { status: 400 });
+        }
+        const catalog = validatePayloadAgainstCatalog(legacy);
+        if (!catalog.ok) {
+          return NextResponse.json({ error: catalog.error }, { status: 400 });
+        }
+        payload = legacy;
+      }
     }
 
-    // ── User resolution ────────────────────────────────────────────────────
-    let userId: string | null = null;
-    let newAccount = false;
-    let tempPassword: string | null = null;
-
+    // ── User resolution (logged-in user wins over account creation) ───────
     const currentUser = await getCurrentUser();
 
-    if (currentUser) {
-      userId = currentUser.id;
-    } else {
-      const existingUser = await getUserByEmail(email);
+    // ── Create the order (idempotent, P2002-safe) ─────────────────────────
+    const result = await createOrderFromPayload(payload, {
+      reference,
+      userId: currentUser?.id ?? null,
+    });
 
-      if (existingUser) {
-        userId = existingUser.id;
-      } else if (createAccount) {
-        tempPassword = generatePassword();
-        const hashedPw = await hashPassword(tempPassword);
-        const newUser = await createUser(name, email, hashedPw);
-
-        userId = newUser.id;
-        newAccount = true;
-
-        const token = generateToken({
-          id: newUser.id,
-          email: newUser.email,
-          role: newUser.role,
-        });
-
-        const cookieStore = await cookies();
-        cookieStore.set("token", token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "lax",
-          maxAge: 60 * 60 * 24 * 7,
-          path: "/",
-        });
-      }
-      // Guest checkout: userId stays null — no silent account is created.
-      // The order is still tracked by email and phone, and the customer
-      // can always create an account later if they want to track orders.
+    // Best-effort cleanup of the consumed snapshot. If the webhook already
+    // deleted it (or is racing us), ignore — the unique paymentRef constraint
+    // guarantees a single Order either way.
+    if (reference) {
+      await prisma.pendingOrder
+        .deleteMany({ where: { reference } })
+        .catch((err) =>
+          console.error("[checkout] PendingOrder cleanup failed (non-fatal):", err)
+        );
     }
 
-    // ── Create the order ───────────────────────────────────────────────────
-    let orderId: string;
-    try {
-      orderId = await createOrder({
-        userId,
-        total,
-        paymentRef,
-        shippingAddress: resolvedAddress,
-        shippingCity: resolvedCity,
-        shippingState: resolvedState,
-        phone,
-        email,
-        items,
+    // ── Log the customer in when an account was created/found for them ─────
+    if (result.user && !currentUser) {
+      const token = generateToken({
+        id: result.user.id,
+        email: result.user.email,
+        role: result.user.role,
       });
-    } catch (createErr: unknown) {
-      // P2002 = unique constraint violation on paymentRef — a concurrent
-      // request already created the order for this payment reference.
-      // Re-fetch the winning order and return it idempotently.
-      if (
-        typeof createErr === "object" && createErr !== null &&
-        "code" in createErr && (createErr as { code: string }).code === "P2002"
-      ) {
-        const existingOrder = await prisma.order.findFirst({ where: { paymentRef } });
-        if (existingOrder) {
-          return NextResponse.json({
-            orderId: existingOrder.id,
-            newAccount: false,
-            message: "Order already exists",
-          });
-        }
-      }
-      throw createErr;
+      const cookieStore = await cookies();
+      cookieStore.set("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 7,
+        path: "/",
+      });
     }
 
-    // ── Emails ─────────────────────────────────────────────────────────────
-    const displayAddress = isPickup
-      ? "Self Pickup — our team will contact you via WhatsApp with pickup details"
-      : `${resolvedAddress}, ${resolvedCity}, ${resolvedState}`;
-
-    const emailData = {
-      customerName: name,
-      customerEmail: email,
-      orderId,
-      items,
-      total,
-      shippingAddress: displayAddress,
-      shippingFee: shippingFee || 0,
-      isParkPickup: isParkPickup || false,
-      deliveryEstimate: deliveryEstimate || (isPickup ? "Customer arranges pickup" : ""),
-    };
-
-    sendOrderConfirmation(emailData).catch(console.error);
-    sendAdminNotification(emailData).catch(console.error);
-
-    if (newAccount && tempPassword) {
-      sendWelcomeEmail({ name, email, password: tempPassword }).catch(console.error);
-    }
+    console.log(
+      `[checkout] Order ${result.created ? "created" : "already exists"} via ${source} payload — ${result.orderId} (ref: ${reference || "none"})`
+    );
 
     return NextResponse.json({
-      orderId,
-      newAccount,
-      message: "Order created successfully",
+      orderId: result.orderId,
+      newAccount: result.newAccount,
+      message: result.created ? "Order created successfully" : "Order already exists",
     });
   } catch (error) {
     console.error("[checkout] Unexpected error:", error);

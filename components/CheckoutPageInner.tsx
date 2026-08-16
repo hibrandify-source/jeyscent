@@ -312,6 +312,7 @@ export default function CheckoutPageInner({ isSubscription }: Props) {
           amount: grandTotal,
           email: form.email,
           name: form.name,
+          checkoutData,
           metadata: {
             customer_phone: form.phone,
             ...(isSubscription && subscriptionData && { subscriptionData }),

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { formatPrice } from "@/data/products";
+import ReconcileOrderPanel from "@/components/ReconcileOrderPanel";
 
 interface OrderItem {
   id: string;
@@ -98,6 +99,8 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="animate-fade-in">
+      <ReconcileOrderPanel />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
         <div>

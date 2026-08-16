@@ -62,6 +62,21 @@ model PendingSubscription {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+// Server-side snapshot of a regular (non-subscription) checkout, keyed by the
+// QorePay reference. Created at payment initialization so order creation no
+// longer depends on the customer's browser (localStorage) surviving until the
+// success-page redirect. Consumed by /api/checkout (reference-driven), the
+// QorePay webhook (/api/payment/webhook), and admin reconciliation
+// (/api/admin/orders/reconcile). `payload` holds the full checkout payload
+// (form, items, delivery, totals, createAccount flag) as built on the
+// checkout page.
+model PendingOrder {
+  id        String   @id @default(cuid())
+  reference String   @unique
+  payload   Json
+  createdAt DateTime @default(now())
+}
+
 model Subscription {
   id           String   @id @default(cuid())
   userId       String

@@ -38,13 +38,34 @@ interface CheckoutData {
   savedAt: number;
 }
 
+// Retry transient failures (network drops, 429 rate limits, 5xx) with
+// backoff. Non-transient errors (400 validation, 404, 401) return immediately.
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  attempts = 3
+): Promise<Response> {
+  let lastRes: Response | null = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if (res.status !== 429 && res.status < 500) return res;
+      lastRes = res;
+    } catch (err) {
+      if (attempt === attempts) throw err;
+    }
+    await new Promise((r) => setTimeout(r, 1000 * attempt));
+  }
+  return lastRes!;
+}
+
 export default function CheckoutSuccessPage() {
   const searchParams = useSearchParams();
   const { refreshUser } = useAuth();
   const { clearCart } = useCart();
   const processedRef = useRef(false);
 
-  const [status, setStatus] = useState<"verifying" | "creating" | "success" | "error">("verifying");
+  const [status, setStatus] = useState<"creating" | "success" | "error">("creating");
   const [orderId, setOrderId] = useState("");
   const [isNewAccount, setIsNewAccount] = useState(false);
   const [error, setError] = useState("");
@@ -68,71 +89,51 @@ export default function CheckoutSuccessPage() {
         return;
       }
 
-      const savedData = localStorage.getItem("jeyscent_checkout");
-      if (!savedData) {
-        setError("Checkout data not found. Please contact support.");
-        setStatus("error");
-        return;
+      let savedData: string | null = null;
+      try {
+        savedData = localStorage.getItem("jeyscent_checkout");
+      } catch {
+        savedData = null;
       }
 
-      const checkoutData: CheckoutData = JSON.parse(savedData);
+      const checkoutData: CheckoutData | null = savedData
+        ? JSON.parse(savedData)
+        : null;
 
-      if (Date.now() - checkoutData.savedAt > 3_600_000) {
-        setError("Checkout session expired. If you were charged, please contact support.");
-        setStatus("error");
-        localStorage.removeItem("jeyscent_checkout");
-        return;
-      }
-
-      const reference = searchParams.get("reference") || checkoutData.paymentRef;
+      // The QorePay reference is the source of truth for order creation —
+      // order data also lives server-side (PendingOrder), so losing
+      // localStorage no longer means losing the order.
+      const reference = searchParams.get("reference") || checkoutData?.paymentRef;
       if (!reference) {
         setError("Payment reference not found. Please contact support.");
         setStatus("error");
         return;
       }
 
-      // ── Verify payment ────────────────────────────────────────────────────
-      setStatus("verifying");
-
-      const verifyRes = await fetch("/api/payment/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reference }),
-      });
-
-      const verifyData = await verifyRes.json();
-
-      if (!verifyRes.ok || !verifyData.verified) {
-        setError(
-          "Payment could not be verified (Status: " +
-          (verifyData.status || "unknown") +
-          "). Reference: " + reference + ". Please contact support."
-        );
-        setStatus("error");
-        return;
-      }
-
-      setStatus("creating");
-
       // ── SUBSCRIPTION: confirm sub only, skip order creation ───────────────
       const subData = localStorage.getItem("jeyscent_subscription");
-      const isSubCheckout = checkoutData.isSubscription === true; // ← use saved flag
+      const isSubCheckout = checkoutData?.isSubscription === true;
 
       if (isSubCheckout && subData) {
         setIsSubscription(true);
         try {
-          await fetch("/api/subscriptions/confirm", { method: "POST" });
+          // Server-side confirm re-verifies the payment with QorePay.
+          await fetchWithRetry("/api/subscriptions/confirm", {
+            method: "POST",
+          });
         } catch (subErr) {
           console.error("Subscription confirm error:", subErr);
         }
 
-        purchase({
-          value: checkoutData.grandTotal,
-          currency: "NGN",
-          content_ids: checkoutData.items.map((i) => i.productId),
-          content_type: "product",
-          num_items: checkoutData.items.reduce((sum, i) => sum + i.quantity, 0),
-        });
+        if (checkoutData) {
+          purchase({
+            value: checkoutData.grandTotal,
+            currency: "NGN",
+            content_ids: checkoutData.items.map((i) => i.productId),
+            content_type: "product",
+            num_items: checkoutData.items.reduce((sum, i) => sum + i.quantity, 0),
+          });
+        }
 
         localStorage.removeItem("jeyscent_subscription");
         sessionStorage.removeItem("jeyscent_sub_session");
@@ -141,38 +142,22 @@ export default function CheckoutSuccessPage() {
         return;
       }
 
-      // If there's leftover subscription data but this is a regular order, ignore it
-      localStorage.removeItem("jeyscent_subscription");
+      if (checkoutData) {
+        // Leftover subscription data but this is a regular order — ignore it.
+        localStorage.removeItem("jeyscent_subscription");
+      }
 
       // ── REGULAR ORDER ─────────────────────────────────────────────────────
-
-      // ── REGULAR ORDER: create order as normal ─────────────────────────────
-      const orderRes = await fetch("/api/checkout", {
+      // POST /api/checkout re-verifies the payment with QorePay server-side
+      // (status SUCCESS + exact amount match) before creating the order, so
+      // this is safe even if the browser previously died at the gateway —
+      // the server snapshot (PendingOrder) supplies the order data.
+      const orderRes = await fetchWithRetry("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: checkoutData.form.name,
-          email: checkoutData.form.email,
-          phone: checkoutData.form.phone,
-          deliveryMethod: checkoutData.deliveryMethod,
-          shippingAddress: checkoutData.deliveryMethod === "pickup"
-            ? "Self Pickup / Customer Rider"
-            : checkoutData.form.address + ", " + checkoutData.form.area,
-          shippingCity: checkoutData.form.city || "N/A",
-          shippingState: checkoutData.form.state || "N/A",
-          paymentRef: reference,
-          total: checkoutData.grandTotal,
-          shippingFee: checkoutData.shippingFee,
-          isParkPickup: checkoutData.isParkPickup,
-          deliveryEstimate: checkoutData.deliveryEstimate,
-          createAccount: checkoutData.createAccount,
-          items: checkoutData.items.map((item) => ({
-            productId: item.productId,
-            name: item.name,
-            size: item.size,
-            quantity: item.quantity,
-            price: item.price,
-          })),
+          reference,
+          ...(checkoutData ? { payload: checkoutData } : {}),
         }),
       });
 
@@ -181,10 +166,10 @@ export default function CheckoutSuccessPage() {
       if (orderRes.ok) {
         setOrderId(orderData.orderId);
         setIsNewAccount(orderData.newAccount || false);
-        setOrderTotal(checkoutData.grandTotal);
+        setOrderTotal(checkoutData?.grandTotal ?? 0);
         setStatus("success");
 
-        if (typeof window !== "undefined" && window.fbq) {
+        if (checkoutData && typeof window !== "undefined" && window.fbq) {
           window.fbq("track", "Purchase", {
             value: checkoutData.grandTotal,
             currency: "NGN",
@@ -211,18 +196,16 @@ export default function CheckoutSuccessPage() {
     }
   };
 
-  if (status === "verifying" || status === "creating") {
+  if (status === "creating") {
     return (
       <div className="page-transition pt-24 lg:pt-28">
         <div className="max-w-lg mx-auto px-6 py-32 text-center">
           <div className="w-12 h-12 border-2 border-black border-t-transparent rounded-full animate-spin mx-auto mb-8" />
           <h1 className="text-2xl mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>
-            {status === "verifying" ? "Verifying Payment..." : "Creating Your Order..."}
+            Confirming Your Payment...
           </h1>
           <p className="text-muted text-sm">
-            {status === "verifying"
-              ? "We're confirming your payment with QorePay."
-              : "Payment confirmed! Setting up your order now."}
+            We&apos;re verifying your payment with QorePay and setting up your order.
           </p>
         </div>
       </div>
