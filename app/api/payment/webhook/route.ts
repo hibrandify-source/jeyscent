@@ -182,24 +182,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // Only act on paid events; acknowledge everything else. QorePay records
-  // successful purchases as event_type "purchase.success" with a
-  // "success"/"paid"-style status — accept every plausible variant so a
-  // successful purchase can never be silently dropped.
-  const status = body.status;
-  const eventType = body.event_type || body.type;
-  const isPaid =
-    status === "paid" ||
-    status === "success" ||
-    status === "completed" ||
-    eventType === "purchase.paid" ||
-    eventType === "purchase.success" ||
-    eventType === "payment.success";
+  // Only act on paid events; acknowledge everything else. QorePay wraps
+  // purchases in a "data" envelope (their API-wide convention) and reports
+  // purchase statuses as uppercase (SUCCESS). Events are named like
+  // "payment.success" / "purchase.success". Extract with multi-fallback so
+  // no successful purchase can ever be silently dropped.
+  const data = (body.data ?? {}) as Record<string, unknown>;
+  const purchase = (data.purchase ?? data.payment ?? {}) as Record<string, unknown>;
+  const transaction = (data.transaction ?? body.transaction ?? {}) as Record<string, unknown>;
 
-  const reference =
-    (typeof body.id === "string" && body.id) ||
-    (typeof body.reference === "string" && body.reference) ||
-    "";
+  const status = body.status ?? data.status ?? purchase.status ?? transaction.status;
+  const eventType =
+    body.event_type ?? body.type ?? body.event ?? data.event_type ?? data.type ?? data.event;
+
+  const norm = (v: unknown): string => String(v).toLowerCase();
+  const isPaid =
+    ["paid", "success", "completed", "successful"].includes(norm(status)) ||
+    ["purchase.paid", "purchase.success", "purchase.completed", "payment.success", "payment.paid"].includes(
+      norm(eventType)
+    );
+
+  const reference = [body, data, purchase, transaction]
+    .map((o) => o.reference ?? o.id)
+    .find((v): v is string => typeof v === "string" && v.length > 0) ?? "";
 
   if (!reference && !status && !eventType) {
     console.log("[webhook] unrecognized payload:", rawBody);
