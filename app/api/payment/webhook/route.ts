@@ -7,6 +7,8 @@ import {
   validatePayloadStructure,
   type OrderPayload,
 } from "@/lib/orders";
+import { confirmClassEnrollment } from "@/lib/classes";
+import { confirmSubscription } from "@/lib/subscriptions";
 
 // ── POST /api/payment/webhook ────────────────────────────────────────────────
 // QorePay server-to-server notification for purchase events. This is the
@@ -34,12 +36,15 @@ import {
 //      (Vercel env + .env.local).
 //
 // The handler acknowledges every event with 200 (so QorePay stops retrying);
-// it only acts on paid purchases that map to a PendingOrder row.
+// it only acts on paid purchases that map to a pending record.
 //
-// NOTE: subscription and class purchases are still confirmed by their own
-// flows (PendingSubscription / PendingEnrollment + confirm endpoints). If
-// those ever need webhook-driven confirmation, dispatch on the pending-table
-// lookup here — the references are unique across all three tables.
+// Dispatch order for a paid reference: PendingOrder (regular orders) →
+// PendingEnrollment (classes) → PendingSubscription (subscriptions). The
+// references are unique across all three tables, and each confirmation
+// re-verifies the purchase with QorePay before writing, so a forged webhook
+// can never grant anything. Class/subscription confirmations share the same
+// library code as the browser confirm endpoints, which keeps them idempotent
+// with each other.
 
 const SIGNATURE_HEADERS = [
   "x-signature",
@@ -231,16 +236,61 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true, orderId: existingOrder.id });
   }
 
-  // ── 4. Locate the pending order snapshot ──────────────────────────────────
+  // ── 4. Locate the pending snapshot ─────────────────────────────────────────
   const pending = await prisma.pendingOrder.findUnique({
     where: { reference },
   });
   if (!pending) {
-    // Subscription/class purchases use their own pending tables + confirm
-    // flows — nothing to do here. Unknown references are acknowledged so the
-    // gateway stops retrying.
-    console.log(`[webhook] No PendingOrder for ref ${reference} — acknowledging.`);
-    return NextResponse.json({ received: true, ignored: "no pending order" });
+    // No PendingOrder — try class enrollment, then subscription. Both re-verify
+    // the purchase with QorePay and are idempotent with the browser confirm
+    // endpoints. A 404 from either means the reference belongs to no pending
+    // record (already consumed, or unknown) — acknowledge so the gateway stops
+    // retrying.
+    const classResult = await confirmClassEnrollment(reference);
+    if (classResult.ok) {
+      console.log(
+        `[webhook] Class enrollment confirmed via webhook for ref ${reference}: ${classResult.enrollmentId}` +
+          (classResult.alreadyConfirmed ? " (already confirmed)" : "")
+      );
+      console.log("[webhook] done — responding");
+      return NextResponse.json({
+        received: true,
+        confirmed: "class",
+        enrollmentId: classResult.enrollmentId,
+      });
+    }
+    if (classResult.status !== 404) {
+      console.error(
+        `[webhook] Class enrollment confirmation failed for ${reference}: ${classResult.error}`
+      );
+      return NextResponse.json(
+        { received: true, error: classResult.error },
+        { status: classResult.status ?? 500 }
+      );
+    }
+
+    const subResult = await confirmSubscription(reference);
+    if (subResult.ok) {
+      console.log(
+        `[webhook] Subscription confirmed via webhook for ref ${reference}` +
+          (subResult.alreadyConfirmed ? " (already confirmed)" : "")
+      );
+      console.log("[webhook] done — responding");
+      return NextResponse.json({ received: true, confirmed: "subscription" });
+    }
+    if (subResult.status !== 404) {
+      console.error(
+        `[webhook] Subscription confirmation failed for ${reference}: ${subResult.error}`
+      );
+      return NextResponse.json(
+        { received: true, error: subResult.error },
+        { status: subResult.status ?? 500 }
+      );
+    }
+
+    // Unknown reference — acknowledged so the gateway stops retrying.
+    console.log(`[webhook] No pending order/enrollment/subscription for ref ${reference} — acknowledging.`);
+    return NextResponse.json({ received: true, ignored: "no pending record" });
   }
 
   const struct = validatePayloadStructure(pending.payload);

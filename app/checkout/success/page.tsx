@@ -114,16 +114,21 @@ export default function CheckoutSuccessPage() {
       const subData = localStorage.getItem("jeyscent_subscription");
       const isSubCheckout = checkoutData?.isSubscription === true;
 
-      if (isSubCheckout && subData) {
-        setIsSubscription(true);
-        try {
-          // Server-side confirm re-verifies the payment with QorePay.
-          await fetchWithRetry("/api/subscriptions/confirm", {
-            method: "POST",
-          });
-        } catch (subErr) {
-          console.error("Subscription confirm error:", subErr);
-        }
+if (isSubCheckout && subData) {
+          setIsSubscription(true);
+          try {
+            // Server-side confirm re-verifies the payment with QorePay. The
+            // reference makes the confirm reference-driven (the same library
+            // the webhook uses), so it stays idempotent with the webhook
+            // confirmation of the same purchase.
+            await fetchWithRetry("/api/subscriptions/confirm", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ reference }),
+            });
+          } catch (subErr) {
+            console.error("Subscription confirm error:", subErr);
+          }
 
         if (checkoutData) {
           purchase({

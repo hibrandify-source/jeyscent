@@ -1,10 +1,17 @@
 // app/api/subscriptions/confirm/route.ts
-import { NextResponse } from "next/server";
+// Thin wrapper around the shared confirmSubscription() in lib/subscriptions.ts,
+// which is also used by the QorePay webhook (/api/payment/webhook).
+//
+// Reference-driven when the success page provides one (it now does), falling
+// back to the legacy "most recent pending subscription for the logged-in
+// user" lookup so old clients / manual flows keep working.
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { rateLimit, tooManyRequests } from "@/lib/rateLimit";
+import { confirmSubscription } from "@/lib/subscriptions";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -16,7 +23,32 @@ export async function POST() {
     const rl = rateLimit(`subconfirm:${user.id}`, { limit: 10, windowMs: 3_600_000 });
     if (!rl.ok) return tooManyRequests(rl.retryAfterMs, "Too many confirmation attempts. Please wait a while.");
 
-    // ── Find most recent pending subscription for this user ───────────────
+    let body: { reference?: string } = {};
+    try {
+      body = await request.json();
+    } catch {
+      // Body-less legacy call — fall through to the fallback path below.
+    }
+
+    const reference = body.reference?.trim();
+
+    if (reference) {
+      // Reference-driven (current success page). expectedUserId keeps a user
+      // from confirming another user's pending purchase by guessing the
+      // reference — rows are still created under the pending row's owner.
+      const result = await confirmSubscription(reference, {
+        expectedUserId: user.id,
+      });
+      if (result.ok) {
+        return NextResponse.json({ success: true });
+      }
+      return NextResponse.json(
+        { error: result.error || "Failed to confirm subscription" },
+        { status: result.status ?? 500 }
+      );
+    }
+
+    // ── Legacy fallback: most recent pending subscription for this user ────
     const pending = await prisma.pendingSubscription.findFirst({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
@@ -29,107 +61,16 @@ export async function POST() {
       );
     }
 
-    // ── Verify payment with QorePay before confirming ─────────────────────
-    try {
-      const verifyRes = await fetch(
-        `https://api.qorepay.com/v1/purchases/${pending.reference}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${process.env.QOREPAY_SECRET_KEY}`,
-          },
-        }
-      );
-      const verifyData = await verifyRes.json();
-
-      if (!verifyRes.ok || verifyData.data?.status !== "SUCCESS") {
-        return NextResponse.json(
-          {
-            error: `Payment not verified. Status: ${verifyData.data?.status || "unknown"}`,
-          },
-          { status: 400 }
-        );
-      }
-    } catch (verifyErr) {
-      console.error("[confirm] Payment verification failed:", verifyErr);
-      return NextResponse.json(
-        { error: "Could not verify payment. Please contact support." },
-        { status: 500 }
-      );
+    const result = await confirmSubscription(pending.reference, {
+      expectedUserId: user.id,
+    });
+    if (result.ok) {
+      return NextResponse.json({ success: true });
     }
-
-    // ── Compute next delivery date ─────────────────────────────────────────
-    const nextDelivery = new Date();
-    nextDelivery.setMonth(
-      nextDelivery.getMonth() + (pending.frequencyMonths || 3)
+    return NextResponse.json(
+      { error: result.error || "Failed to confirm subscription" },
+      { status: result.status ?? 500 }
     );
-
-    // ── Create one subscription record per line item ───────────────────────
-    const items = Array.isArray(pending.items)
-      ? (pending.items as {
-          productId:   string;
-          productName: string;
-          size:        string;
-          quantity:    number;
-          unitPrice:   number;
-          price?:      number;
-        }[])
-      : [];
-
-    if (items.length === 0) {
-      return NextResponse.json(
-        { error: "No items found in pending subscription" },
-        { status: 400 }
-      );
-    }
-
-    for (const item of items) {
-      const unitPrice = item.unitPrice ?? item.price ?? 0;
-
-      // Check for existing active subscription for same product+size
-      const existing = await prisma.subscription.findFirst({
-        where: {
-          userId:    user.id,
-          productId: item.productId,
-          size:      item.size,
-          status:    "active",
-        },
-      });
-
-      if (existing) {
-        // Update quantity on existing instead of duplicating
-        await prisma.subscription.update({
-          where: { id: existing.id },
-          data: {
-            quantity:    (existing.quantity || 1) + (item.quantity || 1),
-            price:       unitPrice,
-            nextDelivery,
-          },
-        });
-        console.log("[confirm] Updated existing subscription:", existing.id);
-      } else {
-        // Create new subscription line
-        await prisma.subscription.create({
-          data: {
-            userId:      user.id,
-            productId:   item.productId,
-            productName: item.productName,
-            size:        item.size,
-            quantity:    item.quantity || 1,
-            frequency:   pending.frequency || "quarterly",
-            price:       unitPrice,
-            status:      "active",
-            nextDelivery,
-          },
-        });
-        console.log("[confirm] Created subscription for:", item.productName);
-      }
-    }
-
-    // ── Clean up pending record ───────────────────────────────────────────
-    await prisma.pendingSubscription.delete({ where: { id: pending.id } });
-
-    return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[POST /api/subscriptions/confirm]", error);
     return NextResponse.json(

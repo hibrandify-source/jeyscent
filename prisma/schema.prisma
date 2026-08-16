@@ -88,10 +88,18 @@ model Subscription {
   price        Float
   status       String   @default("active")
   nextDelivery DateTime
+  // Idempotency anchor for webhook/browser confirmations: the QorePay
+  // reference that created this row (one reference can produce several rows,
+  // one per line item, so this is NOT unique). A confirmation that finds an
+  // existing row for the same reference is a no-op — closes the webhook-vs-
+  // browser race on quantity updates.
+  paymentRef String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([paymentRef])
 }
 
 model BlogPost {
