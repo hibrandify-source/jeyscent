@@ -182,12 +182,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // Only act on paid events; acknowledge everything else.
+  // Only act on paid events; acknowledge everything else. QorePay records
+  // successful purchases as event_type "purchase.success" with a
+  // "success"/"paid"-style status — accept every plausible variant so a
+  // successful purchase can never be silently dropped.
   const status = body.status;
   const eventType = body.event_type || body.type;
   const isPaid =
     status === "paid" ||
+    status === "success" ||
+    status === "completed" ||
     eventType === "purchase.paid" ||
+    eventType === "purchase.success" ||
     eventType === "payment.success";
 
   const reference =
@@ -268,5 +274,6 @@ export async function POST(request: NextRequest) {
     `[webhook] Order ${result.created ? "created" : "already existed"} for ref ${reference}: ${result.orderId}`
   );
 
+  console.log("[webhook] done — responding");
   return NextResponse.json({ received: true, orderId: result.orderId });
 }

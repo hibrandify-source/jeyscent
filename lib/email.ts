@@ -7,10 +7,10 @@ const transporter = nodemailer.createTransport({
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_APP_PASSWORD,
   },
-  pool: true,          // reuse connections
-  maxConnections: 3,
-  rateDelta: 1000,     // 1 second between sends
-  rateLimit: 3,        // max 3 per rateDelta
+  // Note: no `pool` — nodemailer defaults to a fresh connection per send,
+  // which is serverless-safe (pooled sockets can hang in ephemeral
+  // instances). Pool-only options (rateLimit, rateDelta, maxConnections)
+  // intentionally omitted.
 });
 
 // Verify connection on startup (logs clearly if credentials are wrong)

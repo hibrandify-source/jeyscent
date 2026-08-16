@@ -372,7 +372,13 @@ export async function createOrderFromPayload(
     );
   }
   if (opts.awaitEmails) {
-    await Promise.all(emailPromises);
+    // Cap email waiting so payment-critical callers (the webhook) always
+    // respond in time even if SMTP is slow/hung — emails that miss the
+    // window still resolve as background best-effort.
+    await Promise.race([
+      Promise.all(emailPromises),
+      new Promise<void>((resolve) => setTimeout(() => resolve(), 6000)),
+    ]);
   }
 
   return { orderId, created, user: resolvedUser, newAccount };
