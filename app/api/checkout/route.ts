@@ -192,9 +192,13 @@ export async function POST(request: NextRequest) {
     const currentUser = await getCurrentUser();
 
     // ── Create the order (idempotent, P2002-safe) ─────────────────────────
+    // awaitEmails: the serverless runtime kills fire-and-forget promises
+    // after the response, silently dropping confirmation/admin emails — so
+    // await them (capped at 6s inside createOrderFromPayload).
     const result = await createOrderFromPayload(payload, {
       reference,
       userId: currentUser?.id ?? null,
+      awaitEmails: true,
     });
 
     // Best-effort cleanup of the consumed snapshot. If the webhook already

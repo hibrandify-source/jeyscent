@@ -201,6 +201,10 @@ export async function POST(request: NextRequest) {
     (typeof body.reference === "string" && body.reference) ||
     "";
 
+  if (!reference && !status && !eventType) {
+    console.log("[webhook] unrecognized payload:", rawBody);
+  }
+
   console.log(
     `[webhook] Event received — ref: ${reference || "(none)"}, status: ${String(status)}, type: ${String(eventType)}`
   );
