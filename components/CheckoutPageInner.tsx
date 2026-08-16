@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
-import { formatPrice } from "@/data/products";
+import { formatPrice, getSalePrice } from "@/data/products";
 import { getShippingFee, shippingZones } from "@/lib/shipping";
 import { initiateCheckout, addPaymentInfo } from "@/components/MetaPixel";
 import ShippingCalculator from "@/components/ShippingCalculator";
@@ -198,7 +198,7 @@ export default function CheckoutPageInner({ isSubscription }: Props) {
       name: item.name,
       size: item.size,
       quantity: item.quantity,
-      price: item.price,
+      price: getSalePrice(item.price),
       image: item.image,
     }));
   }, [isSubscription, subscriptionData, items]);

@@ -188,7 +188,11 @@ export function validatePayloadAgainstCatalog(payload: OrderPayload): {
       };
     }
     const expectedUnitPrice = getSalePrice(sizeInfo.price);
-    if (item.price !== expectedUnitPrice) {
+    // The customer sees and pays the sale price (e.g. ₦4,080 for a ₦4,000
+    // item with the 2% gateway fee baked in). Accept either the sale price
+    // (what new checkouts send) or the raw store price (stale payloads saved
+    // before that convention) — everything else is price tampering.
+    if (item.price !== expectedUnitPrice && item.price !== sizeInfo.price) {
       return {
         ok: false,
         error: "Price mismatch — please refresh the page and try again",
@@ -274,6 +278,22 @@ export async function createOrderFromPayload(
   }
 
   // ── Create the order (idempotent against concurrent same-reference writes) ──
+  // Store the canonical charged price (sale price, e.g. ₦4,080 for a ₦4,000
+  // item) for each item regardless of which price form the payload carried.
+  // A product removed from the catalog falls back to the payload price — a
+  // verified payment must never be rejected for an old payload.
+  const canonicalItems = payload.items.map((item) => {
+    const product = products.find((p) => p.id === item.productId);
+    const sizeInfo = product?.sizes.find((s) => s.size === item.size);
+    return {
+      productId: item.productId,
+      name: item.name,
+      size: item.size,
+      quantity: item.quantity,
+      price: sizeInfo ? getSalePrice(sizeInfo.price) : item.price,
+    };
+  });
+
   let orderId: string;
   let created = true;
   try {
@@ -290,13 +310,7 @@ export async function createOrderFromPayload(
         phone: payload.form.phone,
         email: payload.form.email,
         items: {
-          create: payload.items.map((item) => ({
-            productId: item.productId,
-            name: item.name,
-            size: item.size,
-            quantity: item.quantity,
-            price: item.price,
-          })),
+          create: canonicalItems,
         },
       },
     });
@@ -331,7 +345,7 @@ export async function createOrderFromPayload(
     customerName: payload.form.name,
     customerEmail: payload.form.email,
     orderId,
-    items: payload.items,
+    items: canonicalItems,
     total: payload.grandTotal,
     shippingAddress: isPickup
       ? "Self Pickup — our team will contact you via WhatsApp with pickup details"
