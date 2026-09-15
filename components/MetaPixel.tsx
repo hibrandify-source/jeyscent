@@ -4,7 +4,9 @@ import Script from "next/script";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 
-const PIXEL_ID = "1005311098603826";
+const FALLBACK_PIXEL_ID = "1005311098603826";
+const PIXEL_ID =
+  process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID || FALLBACK_PIXEL_ID;
 
 // ── Typed fbq helper ───────────────────────────────────────────────────────
 declare global {
@@ -18,10 +20,40 @@ declare global {
   }
 }
 
-export function pageview() {
-  if (typeof window !== "undefined" && window.fbq) {
-    window.fbq("track", "PageView");
+// The pixel library loads async (afterInteractive), so `window.fbq` may not
+// exist yet when an event fires. Buffer those calls and flush them once the
+// script reports it's ready, so no event is silently dropped.
+let pendingEvents: Array<{
+  type: string;
+  event: string;
+  params?: Record<string, unknown>;
+}> = [];
+
+function track(
+  type: string,
+  event: string,
+  params?: Record<string, unknown>
+) {
+  if (typeof window !== "undefined") {
+    if (window.fbq) {
+      window.fbq(type, event, params);
+    } else {
+      pendingEvents.push({ type, event, params });
+    }
   }
+}
+
+export function flushPendingEvents() {
+  if (typeof window === "undefined" || !window.fbq) return;
+  const events = pendingEvents;
+  pendingEvents = [];
+  for (const e of events) {
+    window.fbq(e.type, e.event, e.params);
+  }
+}
+
+export function pageview() {
+  track("track", "PageView");
 }
 
 export function addToCart(params: {
@@ -31,9 +63,7 @@ export function addToCart(params: {
   value: number;
   currency: string;
 }) {
-  if (typeof window !== "undefined" && window.fbq) {
-    window.fbq("track", "AddToCart", params);
-  }
+  track("track", "AddToCart", params);
 }
 
 export function purchase(params: {
@@ -43,9 +73,7 @@ export function purchase(params: {
   content_type: string;
   num_items: number;
 }) {
-  if (typeof window !== "undefined" && window.fbq) {
-    window.fbq("track", "Purchase", params);
-  }
+  track("track", "Purchase", params);
 }
 
 export function viewContent(params: {
@@ -56,9 +84,7 @@ export function viewContent(params: {
   value?: number;
   currency?: string;
 }) {
-  if (typeof window !== "undefined" && window.fbq) {
-    window.fbq("track", "ViewContent", params);
-  }
+  track("track", "ViewContent", params);
 }
 
 export function initiateCheckout(params: {
@@ -68,9 +94,7 @@ export function initiateCheckout(params: {
   value: number;
   currency: string;
 }) {
-  if (typeof window !== "undefined" && window.fbq) {
-    window.fbq("track", "InitiateCheckout", params);
-  }
+  track("track", "InitiateCheckout", params);
 }
 
 export function addPaymentInfo(params: {
@@ -80,9 +104,7 @@ export function addPaymentInfo(params: {
   value: number;
   currency: string;
 }) {
-  if (typeof window !== "undefined" && window.fbq) {
-    window.fbq("track", "AddPaymentInfo", params);
-  }
+  track("track", "AddPaymentInfo", params);
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -95,11 +117,15 @@ export default function MetaPixel() {
     pageview();
   }, [pathname, searchParams]);
 
+  // Don't load the pixel unless a pixel ID is configured.
+  if (!PIXEL_ID) return null;
+
   return (
     <>
       <Script
         id="meta-pixel"
         strategy="afterInteractive"
+        onLoad={flushPendingEvents}
         dangerouslySetInnerHTML={{
           __html: `
             !function(f,b,e,v,n,t,s)

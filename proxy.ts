@@ -19,20 +19,22 @@ import type { NextRequest } from "next/server";
 //   • Gmail mailto links                       -> mailto: scheme
 //   • R2 presigned uploads (XHR from admin)    -> connect-src https://…r2.cloudflarestorage.com
 //   • R2 presigned video streams (<video>)     -> media-src https://…r2.cloudflarestorage.com
+//   • Meta/Facebook Pixel                      -> script-src connect.facebook.net
+//                                              -> connect-src connect.facebook.net + *.facebook.com
 // 'unsafe-eval' is required for Next.js dev mode; in prod it could be
 // removed, but keeping it makes the rule work in both modes without a
 // conditional that's easy to forget when promoting build to prod.
 const R2_HOST = "https://cef4262c981af992b448ebda8d3604e4.eu.r2.cloudflarestorage.com";
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: https: blob:",
   "frame-src 'self' https://drive.google.com",
   "frame-ancestors 'none'",
   "form-action 'self' https://api.qorepay.com",
-  `connect-src 'self' ${R2_HOST}`,
+  `connect-src 'self' https://connect.facebook.net https://*.facebook.com https://*.fbcdn.net ${R2_HOST}`,
   `media-src 'self' ${R2_HOST} blob:`,
   "base-uri 'self'",
   "object-src 'none'",

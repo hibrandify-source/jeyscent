@@ -174,8 +174,8 @@ if (isSubCheckout && subData) {
         setOrderTotal(checkoutData?.grandTotal ?? 0);
         setStatus("success");
 
-        if (checkoutData && typeof window !== "undefined" && window.fbq) {
-          window.fbq("track", "Purchase", {
+        if (checkoutData) {
+          purchase({
             value: checkoutData.grandTotal,
             currency: "NGN",
             content_ids: checkoutData.items.map((i) => i.productId),
