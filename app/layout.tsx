@@ -1,10 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { CartProvider } from "@/context/CartContext";
 import { AuthProvider } from "@/context/AuthContext";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
-import WhatsAppButton from "@/components/WhatsAppButton";
 import MetaPixel from "@/components/MetaPixel";
 import { Suspense } from "react";
 
@@ -49,16 +45,14 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen flex flex-col antialiased">
+        {/* Shared by both storefronts. Header/footer/cart live in the
+            per-storefront layouts: app/(jeyscent)/layout.tsx (jeyscent.com)
+            and app/gift/layout.tsx (gift.jeyscent.com, via proxy.ts). */}
         <AuthProvider>
-          <CartProvider>
-            <Suspense fallback={null}>
-              <MetaPixel />
-            </Suspense>
-            <Header />
-            <main className="flex-1">{children}</main>
-            <Footer />
-            <WhatsAppButton />
-          </CartProvider>
+          <Suspense fallback={null}>
+            <MetaPixel />
+          </Suspense>
+          {children}
         </AuthProvider>
       </body>
     </html>

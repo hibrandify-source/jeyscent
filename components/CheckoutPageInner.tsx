@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { formatPrice, getSalePrice } from "@/data/products";
-import { getShippingFee, shippingZones } from "@/lib/shipping";
+import { getShippingFee, shippingZones, nigerianStates } from "@/lib/shipping";
 import { initiateCheckout, addPaymentInfo } from "@/components/MetaPixel";
 import ShippingCalculator from "@/components/ShippingCalculator";
 import Image from "next/image";
@@ -56,14 +56,6 @@ interface CheckoutItem {
 interface Props {
   isSubscription: boolean; // ← passed as prop, no URL parsing
 }
-
-const nigerianStates = [
-  "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa",
-  "Benue", "Borno", "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti",
-  "Enugu", "FCT", "Gombe", "Imo", "Jigawa", "Kaduna", "Kano", "Katsina",
-  "Kebbi", "Kogi", "Kwara", "Lagos", "Nasarawa", "Niger", "Ogun", "Ondo",
-  "Osun", "Oyo", "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara",
-];
 
 export default function CheckoutPageInner({ isSubscription }: Props) {
   const { items, totalPrice: cartTotal } = useCart();

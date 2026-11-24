@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser, generateToken } from "@/lib/auth";
+import { getCurrentUser, generateToken, authCookieOptions } from "@/lib/auth";
 import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
@@ -220,13 +220,7 @@ export async function POST(request: NextRequest) {
         role: result.user.role,
       });
       const cookieStore = await cookies();
-      cookieStore.set("token", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7,
-        path: "/",
-      });
+      cookieStore.set("token", token, authCookieOptions());
     }
 
     console.log(

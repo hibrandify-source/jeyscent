@@ -17,6 +17,22 @@ export function getJwtSecret(): string {
   return "dev-only-fallback-secret";
 }
 
+// Session cookie options shared by every route that signs a user in. Set
+// AUTH_COOKIE_DOMAIN=.jeyscent.com in production so one login covers both
+// jeyscent.com and gift.jeyscent.com; leave it unset locally and on Vercel
+// preview URLs (a .jeyscent.com cookie would be rejected there).
+export function authCookieOptions(maxAge = 60 * 60 * 24 * 7) {
+  const domain = process.env.AUTH_COOKIE_DOMAIN || undefined;
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge,
+    path: "/",
+    ...(domain ? { domain } : {}),
+  };
+}
+
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }

@@ -12,6 +12,11 @@ interface OrderItem {
   quantity: number;
   price: number;
   productId: string;
+  /** Gifting orders: hamper contents + personalisation. */
+  details?: {
+    contents?: string[];
+    personalisation?: { recipientName: string; message: string; deliveryDate: string };
+  } | null;
 }
 
 interface Order {
@@ -19,6 +24,7 @@ interface Order {
   userId: string;
   total: number;
   status: string;
+  brand?: string;
   paymentRef: string | null;
   shippingAddress: string;
   shippingCity: string;
@@ -173,6 +179,24 @@ export default function AdminOrderDetailPage() {
                       Size: {item.size} • Qty: {item.quantity} •{" "}
                       {formatPrice(item.price)} each
                     </p>
+                    {item.details?.contents && item.details.contents.length > 0 && (
+                      <p className="text-xs text-muted mt-1">
+                        Contents: {item.details.contents.join(", ")}
+                      </p>
+                    )}
+                    {item.details?.personalisation && (
+                      <div className="text-xs mt-1 space-y-0.5">
+                        {item.details.personalisation.recipientName && (
+                          <p>For: {item.details.personalisation.recipientName}</p>
+                        )}
+                        {item.details.personalisation.message && (
+                          <p className="italic">Card: &ldquo;{item.details.personalisation.message}&rdquo;</p>
+                        )}
+                        {item.details.personalisation.deliveryDate && (
+                          <p>Preferred delivery: {item.details.personalisation.deliveryDate}</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <p className="text-sm font-semibold">
                     {formatPrice(item.price * item.quantity)}

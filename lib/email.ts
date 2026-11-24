@@ -20,16 +20,72 @@ transporter.verify().then(() => {
   console.error("[email] Gmail transporter FAILED to connect:", err.message);
 });
 
+interface OrderEmailItemDetails {
+  contents?: string[];
+  personalisation?: { recipientName: string; message: string; deliveryDate: string };
+}
+
 interface OrderEmailData {
+  /** Storefront that sold the order; defaults to the main shop. */
+  brand?: "jeyscent" | "gifting";
   customerName: string;
   customerEmail: string;
   orderId: string;
-  items: { name: string; size: string; quantity: number; price: number }[];
+  items: {
+    name: string;
+    size: string;
+    quantity: number;
+    price: number;
+    details?: OrderEmailItemDetails;
+  }[];
   total: number;
   shippingAddress: string;
   shippingFee?: number;
   isParkPickup?: boolean;
   deliveryEstimate?: string;
+}
+
+// ── Brand chrome ───────────────────────────────────────────────────────────
+// Gifting orders (gift.jeyscent.com) use the same templates with the gifting
+// name, wordmark and links.
+function brandChrome(brand: OrderEmailData["brand"]) {
+  if (brand === "gifting") {
+    return {
+      name: "Jey Scent Gifting",
+      wordmark: "JEY SCENT GIFTING",
+      siteUrl:
+        process.env.NEXT_PUBLIC_GIFT_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL,
+    };
+  }
+  return {
+    name: "Jey Scent",
+    wordmark: "JEY SCENT",
+    siteUrl: process.env.NEXT_PUBLIC_BASE_URL,
+  };
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Contents + personalisation lines for a gift item (empty for regular products). */
+function giftDetailsHtml(details?: OrderEmailItemDetails): string {
+  if (!details) return "";
+  const lines: string[] = [];
+  if (details.contents?.length) {
+    lines.push(`Contents: ${details.contents.map(escapeHtml).join(", ")}`);
+  }
+  const p = details.personalisation;
+  if (p?.recipientName) lines.push(`For: ${escapeHtml(p.recipientName)}`);
+  if (p?.message) lines.push(`Message: &ldquo;${escapeHtml(p.message)}&rdquo;`);
+  if (p?.deliveryDate) lines.push(`Preferred delivery: ${escapeHtml(p.deliveryDate)}`);
+  return lines
+    .map((l) => `<div style="font-size:12px;color:#6b6b6b;margin-top:4px;">${l}</div>`)
+    .join("");
 }
 
 // ── Helper: send with retry ────────────────────────────────────────────────
@@ -53,13 +109,14 @@ async function sendWithRetry(
 
 export async function sendOrderConfirmation(data: OrderEmailData) {
   console.log(`[email] Sending order confirmation to: ${data.customerEmail}`);
+  const chrome = brandChrome(data.brand);
 
   const itemsHtml = data.items
     .map(
       (item) => `
       <tr>
         <td style="padding:12px;border-bottom:1px solid #eee;font-family:'Inter',sans-serif;">
-          ${item.name} (${item.size})
+          ${item.name} (${item.size})${giftDetailsHtml(item.details)}
         </td>
         <td style="padding:12px;border-bottom:1px solid #eee;text-align:center;">
           ${item.quantity}
@@ -93,7 +150,7 @@ export async function sendOrderConfirmation(data: OrderEmailData) {
       </div>`;
 
   await sendWithRetry({
-    from: `"Jey Scent" <${process.env.GMAIL_USER}>`,
+    from: `"${chrome.name}" <${process.env.GMAIL_USER}>`,
     to: data.customerEmail,
     subject: `Order Confirmed — #${data.orderId.slice(-8).toUpperCase()}`,
     html: `<!DOCTYPE html>
@@ -101,7 +158,7 @@ export async function sendOrderConfirmation(data: OrderEmailData) {
 <body style="margin:0;padding:0;background:#faf9f6;font-family:'Inter',sans-serif;">
   <div style="max-width:600px;margin:0 auto;background:#fff;">
     <div style="background:#000;padding:40px;text-align:center;">
-      <h1 style="color:#fff;font-family:'Playfair Display',Georgia,serif;font-size:28px;margin:0;letter-spacing:3px;">JEY SCENT</h1>
+      <h1 style="color:#fff;font-family:'Playfair Display',Georgia,serif;font-size:28px;margin:0;letter-spacing:3px;">${chrome.wordmark}</h1>
     </div>
     <div style="padding:40px;">
       <h2 style="font-family:'Playfair Display',Georgia,serif;font-size:24px;margin-bottom:8px;">
@@ -148,7 +205,7 @@ export async function sendOrderConfirmation(data: OrderEmailData) {
         <p style="margin:0;line-height:1.6;">${data.shippingAddress}</p>
       </div>
       <div style="text-align:center;margin-top:32px;">
-        <a href="${process.env.NEXT_PUBLIC_BASE_URL}/dashboard"
+        <a href="${chrome.siteUrl}/dashboard"
            style="display:inline-block;background:#000;color:#fff;padding:14px 40px;text-decoration:none;font-size:13px;text-transform:uppercase;letter-spacing:2px;">
           Track Your Order
         </a>
@@ -156,7 +213,7 @@ export async function sendOrderConfirmation(data: OrderEmailData) {
     </div>
     <div style="background:#faf9f6;padding:30px;text-align:center;">
       <p style="font-family:'Playfair Display',Georgia,serif;font-size:16px;margin-bottom:8px;">With love &amp; intention 🤍</p>
-      <p style="color:#6b6b6b;font-size:12px;margin:0;">© 2026 Jey Scent. All rights reserved.</p>
+      <p style="color:#6b6b6b;font-size:12px;margin:0;">© 2026 ${chrome.name}. All rights reserved.</p>
     </div>
   </div>
 </body></html>`,
@@ -164,18 +221,19 @@ export async function sendOrderConfirmation(data: OrderEmailData) {
 }
 
 export async function sendAdminNotification(data: OrderEmailData) {
+  const isGift = data.brand === "gifting";
   await sendWithRetry({
     from: `"Jey Scent System" <${process.env.GMAIL_USER}>`,
     to: process.env.GMAIL_USER!,
-    subject: `🛒 New Order — #${data.orderId.slice(-8).toUpperCase()} — ₦${data.total.toLocaleString()}`,
+    subject: `${isGift ? "🎁 New Gifting Order" : "🛒 New Order"} — #${data.orderId.slice(-8).toUpperCase()} — ₦${data.total.toLocaleString()}`,
     html: `<div style="font-family:'Inter',sans-serif;padding:20px;">
-      <h2>New Order Received!</h2>
+      <h2>${isGift ? "New Gifting Order Received!" : "New Order Received!"}</h2>
       <p><strong>Customer:</strong> ${data.customerName} (${data.customerEmail})</p>
       <p><strong>Order ID:</strong> #${data.orderId.slice(-8).toUpperCase()}</p>
       <p><strong>Total:</strong> ₦${data.total.toLocaleString()}</p>
       <p><strong>Shipping:</strong> ${data.shippingAddress}</p>
       <h3>Items:</h3>
-      <ul>${data.items.map((i) => `<li>${i.name} (${i.size}) x${i.quantity} — ₦${(i.price * i.quantity).toLocaleString()}</li>`).join("")}</ul>
+      <ul>${data.items.map((i) => `<li>${i.name} (${i.size}) x${i.quantity} — ₦${(i.price * i.quantity).toLocaleString()}${giftDetailsHtml(i.details)}</li>`).join("")}</ul>
       <a href="${process.env.NEXT_PUBLIC_BASE_URL}/admin/orders"
          style="display:inline-block;background:#000;color:#fff;padding:12px 24px;text-decoration:none;margin-top:16px;">
         View in Dashboard
@@ -354,4 +412,95 @@ export async function sendPasswordChangedEmail(email: string, name: string) {
   </div>
 </body></html>`,
   });
+}
+
+// ── Gifting: corporate quote requests ────────────────────────────────────────
+
+export interface QuoteRequestEmailData {
+  id: string;
+  company: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  occasion: string;
+  quantity: number;
+  budgetPerGift?: number | null;
+  deliveryDate?: string | null;
+  brandingRequired: boolean;
+  message: string;
+}
+
+export async function sendQuoteRequestEmails(data: QuoteRequestEmailData) {
+  const ref = data.id.slice(-8).toUpperCase();
+  const rows: [string, string][] = [
+    ["Company", data.company],
+    ["Contact", data.contactName],
+    ["Email", data.email],
+    ["Phone", data.phone],
+    ["Occasion", data.occasion],
+    ["Quantity", data.quantity.toLocaleString()],
+    ["Budget per gift", data.budgetPerGift ? `₦${data.budgetPerGift.toLocaleString()}` : "Not specified"],
+    ["Needed by", data.deliveryDate || "Not specified"],
+    ["Logo / branding", data.brandingRequired ? "Yes" : "No"],
+    ["Notes", data.message || "—"],
+  ];
+  const table = rows
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:6px 12px 6px 0;color:#6b6b6b;font-size:13px;vertical-align:top;">${k}</td><td style="padding:6px 0;font-size:14px;">${escapeHtml(v)}</td></tr>`
+    )
+    .join("");
+  const giftUrl =
+    process.env.NEXT_PUBLIC_GIFT_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL;
+
+  await Promise.all([
+    sendWithRetry({
+      from: `"Jey Scent System" <${process.env.GMAIL_USER}>`,
+      to: process.env.GMAIL_USER!,
+      replyTo: data.email,
+      subject: `🎁 New Corporate Quote Request — ${data.company} (${data.quantity} gifts)`,
+      html: `<div style="font-family:'Inter',sans-serif;padding:20px;">
+        <h2>New Quote Request #${ref}</h2>
+        <table style="border-collapse:collapse;">${table}</table>
+        <a href="${process.env.NEXT_PUBLIC_BASE_URL}/admin/quotes"
+           style="display:inline-block;background:#000;color:#fff;padding:12px 24px;text-decoration:none;margin-top:16px;">
+          View in Dashboard
+        </a>
+      </div>`,
+    }),
+    sendWithRetry({
+      from: `"Jey Scent Gifting" <${process.env.GMAIL_USER}>`,
+      to: data.email,
+      subject: `We've received your gifting enquiry — #${ref}`,
+      html: `<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#faf9f6;font-family:'Inter',sans-serif;">
+  <div style="max-width:600px;margin:0 auto;background:#fff;">
+    <div style="background:#000;padding:40px;text-align:center;">
+      <h1 style="color:#fff;font-family:'Playfair Display',Georgia,serif;font-size:28px;margin:0;letter-spacing:3px;">JEY SCENT GIFTING</h1>
+    </div>
+    <div style="padding:40px;">
+      <h2 style="font-family:'Playfair Display',Georgia,serif;font-size:24px;margin-bottom:8px;">
+        Thank you, ${escapeHtml(data.contactName)} 🤍
+      </h2>
+      <p style="color:#6b6b6b;line-height:1.6;margin-bottom:24px;">
+        We've received your gifting enquiry for ${escapeHtml(data.company)}. Our team will
+        get back to you within 1–2 business days with ideas and a tailored quote.
+      </p>
+      <table style="border-collapse:collapse;margin-bottom:24px;">${table}</table>
+      <div style="text-align:center;margin-top:32px;">
+        <a href="${giftUrl}"
+           style="display:inline-block;background:#000;color:#fff;padding:14px 40px;text-decoration:none;font-size:13px;text-transform:uppercase;letter-spacing:2px;">
+          Browse Our Gifts
+        </a>
+      </div>
+    </div>
+    <div style="background:#faf9f6;padding:30px;text-align:center;">
+      <p style="font-family:'Playfair Display',Georgia,serif;font-size:16px;margin-bottom:8px;">Thoughtfully curated. Beautifully gifted.</p>
+      <p style="color:#6b6b6b;font-size:12px;margin:0;">© 2026 Jey Scent Gifting. All rights reserved.</p>
+    </div>
+  </div>
+</body></html>`,
+    }),
+  ]);
 }

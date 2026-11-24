@@ -1,5 +1,6 @@
 // components/Footer.tsx
 import Link from "next/link";
+import { GIFT_SITE_URL } from "@/lib/site";
 import NewsletterForm from './NewsletterForm';
 
 export default function Footer() {
@@ -112,6 +113,7 @@ export default function Footer() {
                 { label: "Journal", href: "/blog" },
                 { label: "My Account", href: "/dashboard" },
                 { label: "Track Order", href: "/dashboard" },
+                { label: "Gifting", href: GIFT_SITE_URL },
                 { label: "Jey Craft", href: "/jeycraft" },
               ].map((item) => (
                 <li key={item.label}>

@@ -18,6 +18,7 @@ interface Order {
   userId: string;
   total: number;
   status: string;
+  brand?: string;
   paymentRef: string | null;
   shippingAddress: string;
   shippingCity: string;
@@ -34,6 +35,7 @@ export default function AdminOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [storefront, setStorefront] = useState<"all" | "jeyscent" | "gifting">("all");
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -74,12 +76,14 @@ export default function AdminOrdersPage() {
 
   const filtered = orders.filter((o) => {
     const matchesFilter = filter === "all" || o.status === filter;
+    const matchesStorefront =
+      storefront === "all" || (o.brand ?? "jeyscent") === storefront;
     const matchesSearch =
       search === "" ||
       o.id.toLowerCase().includes(search.toLowerCase()) ||
       o.user?.name?.toLowerCase().includes(search.toLowerCase()) ||
       o.email.toLowerCase().includes(search.toLowerCase());
-    return matchesFilter && matchesSearch;
+    return matchesFilter && matchesStorefront && matchesSearch;
   });
 
   const getStatusColor = (status: string) => {
@@ -140,6 +144,27 @@ export default function AdminOrdersPage() {
         </div>
       </div>
 
+      {/* Storefront */}
+      <div className="flex gap-2 mb-3">
+        {([
+          ["all", "All storefronts"],
+          ["jeyscent", "Jey Scent"],
+          ["gifting", "Gifting"],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => setStorefront(value)}
+            className={`px-4 py-2 text-[10px] uppercase tracking-[2px] border transition-all ${
+              storefront === value
+                ? "bg-black text-white border-black"
+                : "bg-white text-muted border-gray-200 hover:border-black hover:text-black"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Filters */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
         {statuses.map((s) => {
@@ -194,6 +219,11 @@ export default function AdminOrdersPage() {
                       >
                         #{order.id.slice(-8).toUpperCase()}
                       </Link>
+                      {order.brand === "gifting" && (
+                        <span className="ml-2 align-middle text-[9px] uppercase tracking-[2px] bg-[#f5ecd9] text-[#8a6a33] px-2 py-0.5">
+                          Gifting
+                        </span>
+                      )}
                     </div>
 
                     {/* Customer */}

@@ -9,6 +9,7 @@
 // mismatched reference. The unique constraint on Order.paymentRef makes
 // concurrent creations of the same reference resolve to a single Order.
 import { prisma } from "./prisma";
+import type { Prisma } from "@prisma/client";
 import { hashPassword } from "./auth";
 import {
   sendOrderConfirmation,
@@ -16,6 +17,8 @@ import {
   sendWelcomeEmail,
 } from "./email";
 import { products, getSalePrice } from "@/data/products";
+import { getHamper, priceCustomHamper, GIFT_MESSAGE_MAX } from "@/data/gifting";
+import type { GiftPersonalisation } from "./types";
 
 // ── Canonical checkout payload (as built on the checkout page) ─────────────
 
@@ -26,7 +29,25 @@ export interface OrderPayloadItem {
   quantity: number;
   price: number;
   image?: string;
+  /** Gifting orders only — what the line is and who it's for. */
+  details?: GiftItemDetails;
 }
+
+/**
+ * Gifting line details. productId is "hamper:<hamperId>" or "custom:<boxId>";
+ * the price is always re-derived from data/gifting.ts on the server.
+ */
+export interface GiftItemDetails {
+  kind: "hamper" | "custom";
+  hamperId?: string;
+  boxId?: string;
+  itemIds?: string[];
+  personalisation: GiftPersonalisation;
+  /** Filled in server-side when the order is created (item names). */
+  contents?: string[];
+}
+
+export type OrderBrand = "jeyscent" | "gifting";
 
 export interface OrderPayload {
   form: {
@@ -37,7 +58,11 @@ export interface OrderPayload {
     area?: string;
     city?: string;
     state?: string;
+    /** Gifting: the recipient's phone, for the courier. */
+    recipientPhone?: string;
   };
+  /** Storefront that built the payload; absent means the main shop. */
+  brand?: OrderBrand;
   deliveryMethod: "delivery" | "pickup";
   isSubscription?: boolean;
   items: OrderPayloadItem[];
@@ -164,10 +189,96 @@ export function validatePayloadStructure(payload: unknown): {
 // snapshot instead of re-checking against today's catalog (a verified payment
 // must never be rejected because a price changed mid-checkout).
 
+// ── Gifting catalog (data/gifting.ts) ──────────────────────────────────────
+
+/** Selling price + contents for a gifting line, from the live gift catalog (gift prices are final — no gateway fee added). */
+export function resolveGiftItem(
+  item: OrderPayloadItem
+): { ok: true; price: number; contents: string[] } | { ok: false; error: string } {
+  const d = item.details;
+  if (!d || (d.kind !== "hamper" && d.kind !== "custom")) {
+    return { ok: false, error: "Invalid gift in cart" };
+  }
+  if (d.kind === "hamper") {
+    const hamper = d.hamperId ? getHamper(d.hamperId) : undefined;
+    if (!hamper || item.productId !== `hamper:${hamper.id}`) {
+      return { ok: false, error: "Invalid hamper in cart" };
+    }
+    if (!hamper.inStock) {
+      return { ok: false, error: `${hamper.name} is out of stock` };
+    }
+    return { ok: true, price: hamper.price, contents: hamper.contents };
+  }
+  if (!d.boxId || item.productId !== `custom:${d.boxId}`) {
+    return { ok: false, error: "Invalid custom hamper in cart" };
+  }
+  const priced = priceCustomHamper(d.boxId, d.itemIds ?? []);
+  if (!priced.ok) return priced;
+  return {
+    ok: true,
+    price: priced.price,
+    contents: [priced.box.name, ...priced.items.map((i) => i.name)],
+  };
+}
+
+function validatePersonalisation(p: unknown): string | null {
+  const v = p as Partial<GiftPersonalisation> | undefined;
+  if (!v || typeof v !== "object") return "Missing gift personalisation";
+  if (typeof v.recipientName !== "string" || v.recipientName.length > 100) {
+    return "Invalid recipient name";
+  }
+  if (typeof v.message !== "string" || v.message.length > GIFT_MESSAGE_MAX) {
+    return `Gift messages can be up to ${GIFT_MESSAGE_MAX} characters`;
+  }
+  if (
+    typeof v.deliveryDate !== "string" ||
+    (v.deliveryDate !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(v.deliveryDate))
+  ) {
+    return "Invalid delivery date";
+  }
+  return null;
+}
+
+function validateGiftPayloadAgainstCatalog(payload: OrderPayload): {
+  ok: boolean;
+  error?: string;
+} {
+  let computedItemsTotal = 0;
+  for (const item of payload.items) {
+    const resolved = resolveGiftItem(item);
+    if (!resolved.ok) return resolved;
+    const personalisationError = validatePersonalisation(item.details?.personalisation);
+    if (personalisationError) return { ok: false, error: personalisationError };
+    const expectedUnitPrice = resolved.price;
+    if (item.price !== expectedUnitPrice) {
+      return {
+        ok: false,
+        error: "Price mismatch — please refresh the page and try again",
+      };
+    }
+    computedItemsTotal += expectedUnitPrice * item.quantity;
+  }
+
+  const expectedMinTotal =
+    computedItemsTotal + (typeof payload.shippingFee === "number" ? payload.shippingFee : 0);
+  if (typeof payload.grandTotal !== "number" || payload.grandTotal < expectedMinTotal) {
+    return {
+      ok: false,
+      error: "Total mismatch — please refresh the page and try again",
+    };
+  }
+
+  return { ok: true };
+}
+
 export function validatePayloadAgainstCatalog(payload: OrderPayload): {
   ok: boolean;
   error?: string;
 } {
+  if (payload.brand === "gifting") {
+    return validateGiftPayloadAgainstCatalog(payload);
+  }
+
   let computedItemsTotal = 0;
   for (const item of payload.items) {
     const product = products.find((p) => p.id === item.productId);
@@ -237,6 +348,7 @@ export async function createOrderFromPayload(
 ): Promise<CreateOrderResult> {
   const reference = opts.reference || payload.paymentRef || null;
   const isPickup = payload.deliveryMethod === "pickup";
+  const brand: OrderBrand = payload.brand === "gifting" ? "gifting" : "jeyscent";
 
   // ── Resolve the user (existing > create-if-requested > guest) ─────────────
   let userId: string | null = opts.userId ?? null;
@@ -282,7 +394,25 @@ export async function createOrderFromPayload(
   // item) for each item regardless of which price form the payload carried.
   // A product removed from the catalog falls back to the payload price — a
   // verified payment must never be rejected for an old payload.
+  // Gifting lines are priced from data/gifting.ts and keep their details
+  // (contents + personalisation) on the OrderItem.
   const canonicalItems = payload.items.map((item) => {
+    if (brand === "gifting") {
+      const resolved = resolveGiftItem(item);
+      return {
+        productId: item.productId,
+        name: item.name,
+        size: item.size,
+        quantity: item.quantity,
+        price: resolved.ok ? resolved.price : item.price,
+        details: item.details
+          ? {
+              ...item.details,
+              contents: resolved.ok ? resolved.contents : item.details.contents ?? [],
+            }
+          : undefined,
+      };
+    }
     const product = products.find((p) => p.id === item.productId);
     const sizeInfo = product?.sizes.find((s) => s.size === item.size);
     return {
@@ -291,8 +421,14 @@ export async function createOrderFromPayload(
       size: item.size,
       quantity: item.quantity,
       price: sizeInfo ? getSalePrice(sizeInfo.price) : item.price,
+      details: undefined as GiftItemDetails | undefined,
     };
   });
+
+  const recipientPhone =
+    brand === "gifting" && payload.form.recipientPhone
+      ? ` (Recipient phone: ${payload.form.recipientPhone})`
+      : "";
 
   let orderId: string;
   let created = true;
@@ -301,16 +437,20 @@ export async function createOrderFromPayload(
       data: {
         userId,
         total: payload.grandTotal,
+        brand,
         paymentRef: reference,
         shippingAddress: isPickup
           ? "Self Pickup / Customer Rider"
-          : `${payload.form.address || ""}, ${payload.form.area || ""}`,
+          : `${payload.form.address || ""}, ${payload.form.area || ""}${recipientPhone}`,
         shippingCity: isPickup ? "N/A" : payload.form.city || "N/A",
         shippingState: isPickup ? "N/A" : payload.form.state || "N/A",
         phone: payload.form.phone,
         email: payload.form.email,
         items: {
-          create: canonicalItems,
+          create: canonicalItems.map(({ details, ...rest }) => ({
+            ...rest,
+            ...(details ? { details: details as unknown as Prisma.InputJsonValue } : {}),
+          })),
         },
       },
     });
@@ -342,6 +482,7 @@ export async function createOrderFromPayload(
 
   // ── Emails ────────────────────────────────────────────────────────────────
   const emailData = {
+    brand,
     customerName: payload.form.name,
     customerEmail: payload.form.email,
     orderId,
@@ -349,7 +490,7 @@ export async function createOrderFromPayload(
     total: payload.grandTotal,
     shippingAddress: isPickup
       ? "Self Pickup — our team will contact you via WhatsApp with pickup details"
-      : `${payload.form.address || ""}, ${payload.form.city || ""}, ${payload.form.state || ""}`,
+      : `${payload.form.address || ""}, ${payload.form.city || ""}, ${payload.form.state || ""}${recipientPhone}`,
     shippingFee: payload.shippingFee || 0,
     isParkPickup: payload.isParkPickup || false,
     deliveryEstimate:

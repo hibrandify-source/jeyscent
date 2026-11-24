@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
+import { GIFT_SITE_URL } from "@/lib/site";
 
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
@@ -77,6 +78,12 @@ export default function Header() {
                 className="text-[11px] uppercase tracking-[3px] text-charcoal hover:text-black transition-colors duration-300"
               >
                 Class
+              </Link>
+              <Link
+                href={GIFT_SITE_URL}
+                className="text-[11px] uppercase tracking-[3px] text-charcoal hover:text-black transition-colors duration-300"
+              >
+                Gifting
               </Link>
             </nav>
 
@@ -207,6 +214,7 @@ export default function Header() {
                 { href: "/our-story", label: "Our Story" },
                 { href: "/subscribe", label: "Subscribe" },
                 { href: "/classes", label: "Class" },
+                { href: GIFT_SITE_URL, label: "Gifting" },
                 { href: "/blog", label: "Journal" },
                 { href: "/jeycraft", label: "Jey Craft" },
                 {

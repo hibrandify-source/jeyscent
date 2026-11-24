@@ -87,6 +87,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       ),
     },
     {
+      href: "/admin/quotes",
+      label: "Gift Quotes",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="3" y="8" width="18" height="13" rx="1" />
+          <path d="M12 8v13M3 12h18M12 8S10.5 3 7.5 3a2.5 2.5 0 000 5H12zM12 8s1.5-5 4.5-5a2.5 2.5 0 010 5H12z" />
+        </svg>
+      ),
+    },
+    {
       href: "/admin/subscribers",
       label: "Subscribers",
       icon: (

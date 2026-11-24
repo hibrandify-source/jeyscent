@@ -57,8 +57,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const baseUrl =
-      process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    // Gifting checkouts (gift.jeyscent.com) return to the gift storefront's
+    // own success/checkout pages; everything else uses the main shop.
+    const isGift = !isSubscription && checkoutData?.brand === "gifting";
+    const baseUrl = isGift
+      ? process.env.NEXT_PUBLIC_GIFT_BASE_URL || "http://gift.localhost:3000"
+      : process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
     const qorepayRes = await fetch("https://api.qorepay.com/v1/purchases", {
       method: "POST",
@@ -71,7 +75,7 @@ export async function POST(request: NextRequest) {
         currency: "NGN",
         brand_id: process.env.QOREPAY_BRAND_ID,
         customer_email: email,
-        description: `JeyScent Order — ${name || email}`,
+        description: `${isGift ? "Jey Scent Gifting" : "JeyScent"} Order — ${name || email}`,
         metadata,
         // ✅ Both flows go to the same success page
         redirect_url: `${baseUrl}/checkout/success`,

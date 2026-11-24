@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserByEmail } from "@/lib/db";
-import { verifyPassword, generateToken } from "@/lib/auth";
+import { verifyPassword, generateToken, authCookieOptions } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { rateLimit, clientIp, tooManyRequests } from "@/lib/rateLimit";
 
@@ -49,13 +49,7 @@ export async function POST(request: NextRequest) {
     });
 
     const cookieStore = await cookies();
-    cookieStore.set("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    });
+    cookieStore.set("token", token, authCookieOptions());
 
     return NextResponse.json({
       user: {
